@@ -1,0 +1,334 @@
+═══════════════════════════════════════════════════════════════════════════════
+           FORWARD TESTING SYSTEM - QUICK RUN GUIDE (2026-03-23)
+═══════════════════════════════════════════════════════════════════════════════
+
+SYSTEM OVERVIEW
+───────────────────────────────────────────────────────────────────────────────
+TradingView ABC Pattern Indicator → ngrok Tunnel → Flask Webhook Server →
+   ↓
+MetaTrader 5 (Auto Trade Execution with Risk-Based Position Sizing)
+
+───────────────────────────────────────────────────────────────────────────────
+CRITICAL CREDENTIALS & CONFIGURATION
+───────────────────────────────────────────────────────────────────────────────
+
+🔐 TRADINGVIEW WEBHOOK
+   Webhook URL: https://transcendentalistic-incredible-peggie.ngrok-free.dev/webhook?token=pBNYsisvmd7kxs9nNGRk7_Gk--V3Ep23wNbmmx44Oog
+   Shared Token: pBNYsisvmd7kxs9nNGRk7_Gk--V3Ep23wNbmmx44Oog
+
+🔐 METATRADER 5 (ICMarkets Demo Account)
+   Account Number (Login): 52801643
+   Password: bPW0@E6@dLOCL&
+   Server: ICMarketsSC-Demo
+
+🔐 NGROK TUNNEL
+   Current URL: https://transcendentalistic-incredible-peggie.ngrok-free.dev
+   Local Port: 5000
+
+📊 TRADING SETTINGS
+   Risk Per Trade: $100 USD
+   Executor Mode: real (live orders to MT5)
+   MT5 Magic Number: 234000
+   MT5 Deviation: 20 pips
+
+📋 SUPPORTED SYMBOLS (20 instruments)
+   Forex:   EURUSD, USDJPY, GBPUSD, AUDUSD, USDCAD, USDCHF, NZDUSD, GBPAUD, GBPJPY
+   Indices: US500, US30, UK100, JP225, HK50
+   Metals:  XAUUSD, XAGUSD
+   Crypto:  BTCUSD, ETHUSD, BNBUSD, SOLUSD
+   (Add more in MT5_SYMBOL_MAP in .env as needed)
+
+───────────────────────────────────────────────────────────────────────────────
+STEP-BY-STEP STARTUP PROCEDURE
+───────────────────────────────────────────────────────────────────────────────
+
+⚠️  PREREQ: Make sure MetaTrader 5 terminal is ALREADY OPEN with:
+    ✅ ICMarkets Demo Account logged in (Account: 52801643)
+    ✅ AutoTrading button is GREEN (top toolbar)
+    ✅ Network connection active
+
+STEP 1: Start ngrok Tunnel (Expose localhost:5000 to internet)
+────────────────────────────────────────────────────────────────
+   Terminal 1 (PowerShell or Command Prompt):
+
+   ngrok http 5000
+
+   ✅ Wait for output like:
+      Forwarding  https://transcendentalistic-incredible-peggie.ngrok-free.dev → http://localhost:5000
+
+   ℹ️  If URL is different, update TradingView alert webhook URL
+
+STEP 2: Start Flask Webhook Server
+────────────────────────────────────────────────────────────────
+   Terminal 2 (Command Prompt):
+
+   cd C:\Users\HP\OneDrive\Desktop\trading_forward_test
+   python -m server.webhook_server
+
+   ✅ Wait for output:
+      [INFO] Starting Flask server on 0.0.0.0:5000
+      [INFO] Database initialized
+      * Running on http://0.0.0.0:5000
+
+STEP 3: Verify Webhook Server Health
+────────────────────────────────────────────────────────────────
+   Terminal 3 (PowerShell):
+
+   Invoke-WebRequest -Uri "http://localhost:5000/health" -Method GET
+
+   ✅ Expected response: HTTP 200 OK
+      {"status":"healthy","timestamp":"2026-03-21T..."}
+
+STEP 4: Configure TradingView Alert Webhook
+────────────────────────────────────────────────────────────────
+   In TradingView chart (ABC Pattern indicator):
+
+   1. Open Alert Settings (for any alert on chart)
+   2. Go to "Notifications" tab
+   3. Paste Webhook URL:
+      https://transcendentalistic-incredible-peggie.ngrok-free.dev/webhook?token=pBNYsisvmd7kxs9nNGRk7_Gk--V3Ep23wNbmmx44Oog
+   4. Save Alert
+
+   ℹ️  Repeat for all your ABC Pattern indicators across all 20 symbols
+       (Forex, Indices, Metals, Crypto — see SUPPORTED SYMBOLS above)
+
+STEP 5: Monitor Real-Time Trading
+────────────────────────────────────────────────────────────────
+   ✅ Watch these 3 screens side-by-side:
+      1. TradingView chart (see when signal fires)
+      2. Flask server terminal (see webhook log in real-time)
+      3. MT5 terminal Trade tab (see orders execute)
+
+───────────────────────────────────────────────────────────────────────────────
+TRADE SIGNAL FLOW (What Happens When ABC Pattern Fires)
+───────────────────────────────────────────────────────────────────────────────
+
+1. TradingView: ABC Pattern completes at C level → SELL/BUY signal fires
+
+2. Alert Message: Sent as JSON to ngrok webhook
+   Example:
+   {
+      "indicator_id": "ABC_Pattern_v2",
+      "strategy_id": "abc_geometric",
+      "symbol": "GBPAUD",
+      "action": "SELL",
+      "risk": 1.0,
+      "meta": {
+         "tp": 1.87779,
+         "sl": 1.88606,
+         "rr": "3.38:1"
+      }
+   }
+
+3. Flask Server:
+   • Validates signal against webhook token
+   • Checks for duplicates (same symbol + TP + SL within 5 min)
+   • Calculates lot size from $100 risk and SL distance
+   • Logs signal to SQLite database
+   • Sends to MT5 executor
+
+4. MT5 Executor:
+   • Connects to running MT5 terminal
+   • Gets current market price
+   • Validates TP/SL against MT5 requirements
+   • Places MARKET ORDER with TP/SL
+   • Logs execution result to database
+
+5. Result:
+   ✅ Order appears in MT5 Trade tab
+   ✅ Execution logged to: logs/trades.db (SQLite)
+   ✅ Real-time logs: real-time-logs/trading-view-alert-logs.csv
+   ✅ Real-time logs: real-time-logs/mt5-logs.log
+
+───────────────────────────────────────────────────────────────────────────────
+TESTING & VERIFICATION
+───────────────────────────────────────────────────────────────────────────────
+
+DUMMY ALERT TEST (Verify end-to-end before live trading)
+────────────────────────────────────────────────────────────────
+   Terminal 3 (PowerShell):
+
+   $token = "pBNYsisvmd7kxs9nNGRk7_Gk--V3Ep23wNbmmx44Oog"
+   $url = "https://transcendentalistic-incredible-peggie.ngrok-free.dev/webhook?token=$token"
+   $body = '{"indicator_id":"ABC_Pattern_v2","strategy_id":"abc_geometric","symbol":"EURUSD","action":"BUY","risk":1.0,"meta":{"tp":1.1550,"sl":1.1400}}'
+   Invoke-WebRequest -Uri $url -Method POST -ContentType "application/json" -Body $body
+
+   ✅ Expected Response:
+      HTTP 200 OK
+      {"status":"signal_received","execution":"filled","broker_order_id":"12345..."}
+
+   ✅ Check MT5 Trade tab → New BUY position on EURUSD with TP/SL
+
+HEALTH CHECK (All Systems Running?)
+────────────────────────────────────────────────────────────────
+   1. MT5 Terminal: Open? AutoTrading green?
+   2. ngrok: Terminal running? Shows "Forwarding" message?
+   3. Flask Server: Terminal showing "Running on..."?
+   4. TradingView: Alerts configured with correct webhook URL?
+
+LOGS LOCATIONS
+────────────────────────────────────────────────────────────────
+   Database:        C:\Users\HP\OneDrive\Desktop\trading_forward_test\logs\trades.db
+   Alert Logs:      C:\Users\HP\OneDrive\Desktop\trading_forward_test\real-time-logs\trading-view-alert-logs.csv
+   Execution Logs:  C:\Users\HP\OneDrive\Desktop\trading_forward_test\real-time-logs\mt5-logs.log
+
+───────────────────────────────────────────────────────────────────────────────
+TROUBLESHOOTING
+───────────────────────────────────────────────────────────────────────────────
+
+⚠️  "ngrok not recognized"
+    → Use full path: "C:\Program Files\ngrok\ngrok.exe" http 5000
+    → Or add ngrok to PATH
+
+⚠️  "Webhook receiving 401 Unauthorized"
+    → Token in TradingView webhook URL doesn't match WEBHOOK_SHARED_TOKEN
+    → Copy-paste from .env: pBNYsisvmd7kxs9nNGRk7_Gk--V3Ep23wNbmmx44Oog
+
+⚠️  "MT5_10027: AutoTrading disabled by client"
+    → In MT5: Top toolbar → Click AutoTrading button to turn it green
+
+⚠️  "Order rejected: Invalid stops"
+    → TP/SL prices are too close to current price
+    → Use wider margins (TP should be 50+ pips away, SL should be 30+ pips)
+
+⚠️  "Order rejected: Symbol not found"
+    → Symbol doesn't exist on your MT5 account
+    → Check MT5_SYMBOL_MAP in .env
+    → Test with EURUSD first (most stable)
+
+⚠️  "Flask server not starting"
+    → Port 5000 already in use: change SERVER_PORT in .env
+    → Delete old logs/ folder and restart: rm logs -r
+
+───────────────────────────────────────────────────────────────────────────────
+IMPORTANT PINESCRIPT INDICATOR SETTINGS (TradingView)
+───────────────────────────────────────────────────────────────────────────────
+
+In TradingView indicator inputs, verify these settings:
+
+✅ Enable Trade Signals: ON
+✅ Bull SL Mode: "C Level %"
+✅ Bear SL Mode: "C Level %"
+✅ Bull SL % below C: 0.1
+✅ Bear SL % above C: 0.1
+✅ TP Adjustment %: 0 (MUST be zero)
+
+These ensure TP/SL values match on-chart display and webhook JSON exactly.
+
+───────────────────────────────────────────────────────────────────────────────
+DAILY OPERATION CHECKLIST
+───────────────────────────────────────────────────────────────────────────────
+
+Before Market Opens:
+☐ MT5 terminal is open and logged into ICMarkets Demo (52801643)
+☐ AutoTrading button is GREEN
+☐ ngrok tunnel is running (shows "Forwarding" URL)
+☐ Flask server is running (shows "Running on...")
+☐ TradingView alerts are configured with webhook URL
+☐ Test a dummy alert to confirm end-to-end flow works
+
+During Trading:
+☐ Watch TradingView for ABC Pattern signals
+☐ Check Flask terminal for webhook logs
+☐ Check MT5 Trade tab for open positions
+☐ Monitor SL/TP levels against live price
+
+After Trading:
+☐ Review execution logs in real-time-logs/mt5-logs.log
+☐ Verify all orders filled correctly
+☐ Check database: logs/trades.db for signal records
+
+───────────────────────────────────────────────────────────────────────────────
+FILE DIRECTORY STRUCTURE
+───────────────────────────────────────────────────────────────────────────────
+
+C:\Users\HP\OneDrive\Desktop\trading_forward_test\
+├── .env                              (Configuration — EDIT THIS for credentials)
+├── .env.example                      (Example config template)
+├── app_logging.py                    (Logging configuration)
+├── config.py                         (App config loader)
+├── run_system.py                     (System initializer)
+├── requirements.txt                  (Python dependencies)
+├── QUICK_RUN_GUIDE.txt              (THIS FILE)
+├── server/
+│   ├── webhook_server.py            (Flask webhook receiver)
+│   └── signal_schema.py             (Signal validation)
+├── executor/
+│   ├── mt5_executor.py              (MT5 order executor)
+│   └── __init__.py
+├── database/
+│   ├── db.py                        (SQLite database functions)
+│   └── __init__.py
+├── logs/                            (Auto-created)
+│   └── trades.db                    (SQLite database)
+├── real-time-logs/                  (Auto-created)
+│   ├── trading-view-alert-logs.csv  (Alert log)
+│   └── mt5-logs.log                 (MT5 execution log)
+├── tests/                           (Test suite)
+└── dashboard/
+    └── dashboard.py                 (Streamlit dashboard)
+
+───────────────────────────────────────────────────────────────────────────────
+QUICK REFERENCE: All IDs and Tokens
+───────────────────────────────────────────────────────────────────────────────
+
+WEBHOOK_SHARED_TOKEN:       pBNYsisvmd7kxs9nNGRk7_Gk--V3Ep23wNbmmx44Oog
+MT5_LOGIN:                  52801643
+MT5_PASSWORD:               bPW0@E6@dLOCL&
+MT5_SERVER:                 ICMarketsSC-Demo
+MT5_MAGIC:                  234000
+MT5_DEVIATION:              20 pips
+RISK_PER_TRADE:             $100 USD
+NGROK_CURRENT_URL:          https://transcendentalistic-incredible-peggie.ngrok-free.dev
+
+FULL WEBHOOK URL (for TradingView):
+https://transcendentalistic-incredible-peggie.ngrok-free.dev/webhook?token=pBNYsisvmd7kxs9nNGRk7_Gk--V3Ep23wNbmmx44Oog
+
+───────────────────────────────────────────────────────────────────────────────
+COMMON COMMANDS
+───────────────────────────────────────────────────────────────────────────────
+
+Start ngrok:
+   ngrok http 5000
+
+Start Flask Server:
+   cd C:\Users\HP\OneDrive\Desktop\trading_forward_test && python -m server.webhook_server
+
+Send Dummy Alert (PowerShell):
+   $token = "pBNYsisvmd7kxs9nNGRk7_Gk--V3Ep23wNbmmx44Oog"
+   $url = "https://transcendentalistic-incredible-peggie.ngrok-free.dev/webhook?token=$token"
+   $body = '{"indicator_id":"ABC_Pattern_v2","strategy_id":"abc_geometric","symbol":"EURUSD","action":"BUY","risk":1.0,"meta":{"tp":1.1550,"sl":1.1400}}'
+   Invoke-WebRequest -Uri $url -Method POST -ContentType "application/json" -Body $body
+
+View Database (Python):
+   import sqlite3
+   conn = sqlite3.connect("logs/trades.db")
+   cursor = conn.cursor()
+   cursor.execute("SELECT signal_id, symbol, action, status FROM signals ORDER BY received_at DESC LIMIT 10")
+   for row in cursor.fetchall():
+       print(row)
+
+───────────────────────────────────────────────────────────────────────────────
+NOTES
+───────────────────────────────────────────────────────────────────────────────
+
+⚠️  ngrok URL changes every 2 hours on free tier
+    → If ngrok restarts, get new URL and update TradingView alerts
+
+⚠️  MT5 terminal MUST stay open during trading
+    → Closing MT5 will disconnect executor
+
+⚠️  Risk calculation uses SL distance automatically
+    → $100 risk / (SL_price - Entry_price) = lot size
+    → Executes at MARKET price (not entry price from indicator)
+
+⚠️  TP/SL are ABSOLUTE prices (not pips)
+    → TradingView sends exact TP/SL from indicator
+    → MT5 uses these prices directly
+
+✅  All logs are saved for review and backtesting
+
+───────────────────────────────────────────────────────────────────────────────
+Last Updated: 2026-03-23
+Version: 1.1 (Updated credentials + 20-symbol coverage)
+───────────────────────────────────────────────────────────────────────────────

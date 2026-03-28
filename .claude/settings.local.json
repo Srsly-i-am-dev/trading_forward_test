@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs ls:*)",
+      "Bash(python -c \"import secrets; print\\(secrets.token_urlsafe\\(32\\)\\)\")",
+      "Bash(python run_system.py)",
+      "Bash(python -m server.webhook_server)",
+      "Bash(curl -s http://localhost:5000/health)",
+      "Bash(streamlit run:*)",
+      "Bash(curl -s http://localhost:8501)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://transcendentalistic-incredible-peggie.ngrok-free.dev/health)",
+      "WebSearch",
+      "Bash(find C:UsersDEVOneDriveDesktoptrading_forward_test -type f \\\\\\(-name *.md -o -name *.txt -o -name .env* \\\\\\))",
+      "Bash(where ngrok:*)",
+      "Read(//c/Users/DEV/**)",
+      "Bash(grep -E \"\\\\.\\(md|txt\\)$\")"
+    ]
+  }
+}

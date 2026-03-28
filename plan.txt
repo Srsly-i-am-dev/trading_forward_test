@@ -1,0 +1,317 @@
+Build Multi-Indicator Forward Testing System (TradingView → cTrader)
+Objective
+
+Build a local system that:
+
+Receives TradingView webhook alerts
+
+Executes trades on cTrader (IC Markets) (placeholder initially)
+
+Logs all signals and trades
+
+Tracks indicator performance per pair
+
+Displays results in a dashboard
+
+System must support:
+
+10–15 indicators
+
+8–10 forex pairs
+
+~150 strategy streams
+
+No VPS. Runs locally.
+
+System Architecture
+
+TradingView Indicators
+→ TradingView Alerts
+→ ngrok public webhook
+→ Local Python Webhook Server
+→ Trade Executor
+→ Trade Logger
+→ SQLite Database
+→ Analytics Dashboard
+
+Required Python Packages
+
+Install:
+
+pip install flask pandas requests streamlit pyngrok
+
+Note:
+Do NOT install sqlite3 because it is included in Python.
+
+Project Structure
+
+Create the following directory structure.
+
+trading_forward_test/
+
+server/
+    webhook_server.py
+
+executor/
+    ctrader_executor.py
+
+database/
+    db.py
+
+logs/
+    trades.db
+
+dashboard/
+    dashboard.py
+
+run_system.py
+Database Module
+
+Create:
+
+database/db.py
+
+Code:
+
+import sqlite3
+
+DB_PATH = "logs/trades.db"
+
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS trades(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        indicator TEXT,
+        symbol TEXT,
+        action TEXT,
+        price REAL,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    conn.commit()
+    conn.close()
+
+
+def log_trade(indicator, symbol, action, price):
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    INSERT INTO trades(indicator, symbol, action, price)
+    VALUES (?, ?, ?, ?)
+    """, (indicator, symbol, action, price))
+
+    conn.commit()
+    conn.close()
+Trade Executor
+
+Create:
+
+executor/ctrader_executor.py
+
+Code template:
+
+def execute_trade(signal):
+
+    symbol = signal["symbol"]
+    action = signal["action"]
+    indicator = signal["indicator"]
+
+    print(f"Executing {action} on {symbol} from {indicator}")
+
+    # placeholder for ctrader api integration
+
+    simulated_price = 0
+
+    return simulated_price
+Webhook Server
+
+Create:
+
+server/webhook_server.py
+
+Code:
+
+from flask import Flask, request, jsonify
+
+from executor.ctrader_executor import execute_trade
+from database.db import log_trade
+
+app = Flask(__name__)
+
+
+@app.route("/webhook", methods=["POST"])
+def webhook():
+
+    data = request.json
+
+    indicator = data.get("indicator")
+    symbol = data.get("symbol")
+    action = data.get("action")
+
+    print("Received signal:", data)
+
+    price = execute_trade(data)
+
+    log_trade(indicator, symbol, action, price)
+
+    return jsonify({"status": "ok"})
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
+Dashboard
+
+Create:
+
+dashboard/dashboard.py
+
+Code:
+
+import sqlite3
+import pandas as pd
+import streamlit as st
+
+conn = sqlite3.connect("logs/trades.db")
+
+df = pd.read_sql("SELECT * FROM trades", conn)
+
+st.title("Forward Testing Dashboard")
+
+st.subheader("All Signals")
+
+st.dataframe(df)
+
+st.subheader("Signals per Indicator")
+
+indicator_counts = df["indicator"].value_counts()
+
+st.bar_chart(indicator_counts)
+
+st.subheader("Signals per Symbol")
+
+symbol_counts = df["symbol"].value_counts()
+
+st.bar_chart(symbol_counts)
+System Launcher Script
+
+Create:
+
+run_system.py
+
+Code:
+
+from database.db import init_db
+
+init_db()
+
+print("Database initialized.")
+print("Run the following commands in separate terminals:")
+
+print("1) python server/webhook_server.py")
+print("2) ngrok http 5000")
+print("3) streamlit run dashboard/dashboard.py")
+Running the System
+
+Step 1
+
+Initialize database
+
+python run_system.py
+
+Step 2
+
+Start webhook server
+
+python server/webhook_server.py
+
+Step 3
+
+Expose webhook using ngrok
+
+ngrok http 5000
+
+ngrok will return something like:
+
+https://abc123.ngrok-free.app
+
+Webhook URL:
+
+https://abc123.ngrok-free.app/webhook
+TradingView Alert Format
+
+Each indicator must send alerts using JSON.
+
+Example:
+
+{
+"indicator": "EMA_RSI_V1",
+"symbol": "EURUSD",
+"action": "buy"
+}
+
+Webhook URL:
+
+https://YOUR_NGROK_URL/webhook
+PineScript Alert Example
+alertcondition(buySignal,
+"BUY",
+'{"indicator":"EMA_RSI_V1","symbol":"EURUSD","action":"buy"}')
+
+alertcondition(sellSignal,
+"SELL",
+'{"indicator":"EMA_RSI_V1","symbol":"EURUSD","action":"sell"}')
+Logging Format
+
+Each signal stored as:
+
+indicator
+symbol
+action
+price
+timestamp
+
+This allows performance tracking by:
+
+indicator
+
+pair
+
+time
+
+Scaling Strategy Streams
+
+The system must support:
+
+15 indicators
+×
+10 pairs
+= 150 signal streams
+
+Each indicator must include a unique identifier.
+
+Example:
+
+EMA_V1_EURUSD
+EMA_V1_GBPUSD
+EMA_V1_USDJPY
+Future Integration Placeholder
+
+The following modules will be added later:
+
+ctrader open api integration
+trade exit tracking
+profit calculation
+risk management
+strategy ranking
+ml strategy selector
+
+The system must remain modular for these future additions.
+
+END OF BUILD INSTRUCTIONS.
