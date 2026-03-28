@@ -13,7 +13,8 @@
       "Bash(find C:UsersDEVOneDriveDesktoptrading_forward_test -type f \\\\\\(-name *.md -o -name *.txt -o -name .env* \\\\\\))",
       "Bash(where ngrok:*)",
       "Read(//c/Users/DEV/**)",
-      "Bash(grep -E \"\\\\.\\(md|txt\\)$\")"
+      "Bash(grep -E \"\\\\.\\(md|txt\\)$\")",
+      "Bash(curl -s -X POST http://localhost:5000/webhook -H \"Content-Type: application/json\" -H \"X-Webhook-Token: pBNYsisvmd7kxs9nNGRk7_Gk--V3Ep23wNbmmx44Oog\" -d '{\"\"indicator_id\"\":\"\"abc_pattern_enhanced\"\",\"\"strategy_id\"\":\"\"abc_geometric\"\",\"\"symbol\"\":\"\"EURUSD\"\",\"\"action\"\":\"\"BUY\"\",\"\"risk\"\":1.0,\"\"meta\"\":{\"\"tp\"\":1.09000,\"\"sl\"\":1.08500,\"\"c_level\"\":1.08600,\"\"rr\"\":\"\"1.5:1\"\"}}')"
     ]
   }
 }
