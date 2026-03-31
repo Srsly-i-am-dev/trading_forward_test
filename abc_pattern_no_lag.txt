@@ -1,0 +1,237 @@
+//@version=5
+indicator("ABC Pattern No Lag - Trade Signals with TP/SL", shorttitle="ABC NoLag", overlay=true, max_lines_count=500, max_labels_count=500)
+
+// ── INPUTS ──────────────────────────────────────────────────
+lookback = input.int(10,    "Pivot Lookback",  minval=2, maxval=50)
+showBuy  = input.bool(true, "Show Buy Zone")
+showSell = input.bool(true, "Show Sell Zone")
+showTgt  = input.bool(true, "Show Target Line")
+showFail = input.bool(true, "Show Failure Level")
+showPath = input.bool(true, "Show ABC Path Lines")
+showPct  = input.bool(true, "Show % Labels")
+cBuy     = input.color(color.new(#00E676, 0), "Buy Color")
+cSell    = input.color(color.new(#FF1744, 0), "Sell Color")
+cTarget  = input.color(color.new(#FFD600, 0), "Target Color")
+cFail    = input.color(color.new(#FF6D00, 0), "Fail Color")
+
+// ── TRADING SIGNALS INPUTS ──────────────────────────────────
+enableTradeSignals = input.bool(true, "Enable Trade Signals")
+signalMode = input.string("On C Confirmation (No Extra Bar)", "Signal Mode", options=["On C Confirmation (No Extra Bar)", "On Next Bar (Legacy)"])
+cToleranceTicks = input.int(2, "C Stability Tolerance (ticks, legacy mode)", minval=0, maxval=50)
+showSignalMarkers = input.bool(true, "Show Signal Markers")
+
+// Custom TP/SL override
+useCustomTP = input.bool(false, "Override TP with Custom Value?")
+customTP = input.float(0.0, "Custom TP Value (0 = auto)", minval=0, step=0.01)
+
+useCustomSL = input.bool(false, "Override SL with Custom Value?")
+customSL = input.float(0.0, "Custom SL Value (0 = auto)", minval=0, step=0.01)
+
+// SL Percentage
+bullSLPercent = input.float(0.5, "Bull SL: % below C", minval=0.1, maxval=5.0, step=0.1)
+bearSLPercent = input.float(0.5, "Bear SL: % above C", minval=0.1, maxval=5.0, step=0.1)
+
+// Show TP/SL lines
+showTPSL = input.bool(true, "Show TP/SL Lines")
+
+// ── PIVOTS ───────────────────────────────────────────────────
+ph = ta.pivothigh(high, lookback, lookback)
+pl = ta.pivotlow(low,   lookback, lookback)
+
+var float ph1 = na
+var float ph2 = na
+var float pl1 = na
+var float pl2 = na
+var int ph1b  = na
+var int ph2b  = na
+var int pl1b  = na
+var int pl2b  = na
+
+if not na(ph)
+    ph2  := ph1
+    ph2b := ph1b
+    ph1  := ph
+    ph1b := bar_index - lookback
+
+if not na(pl)
+    pl2  := pl1
+    pl2b := pl1b
+    pl1  := pl
+    pl1b := bar_index - lookback
+
+// ── BULLISH ABC ──────────────────────────────────────────────
+bul = not na(pl2) and not na(ph1) and not na(pl1) and pl2b < ph1b and ph1b < pl1b and pl1 > pl2 and ph1 > pl2 and ph1 > pl1
+
+bA  = bul ? pl2 : float(na)
+bB  = bul ? ph1 : float(na)
+bC  = bul ? pl1 : float(na)
+bT  = bul ? (bB * bC) / bA : float(na)
+
+bpAB = bul ? ((bB - bA) / bA) * 100 : float(na)
+bpBC = bul ? ((bB - bC) / bB) * 100 : float(na)
+bpCT = bul ? ((bT - bC) / bC) * 100 : float(na)
+
+// ── BEARISH ABC ──────────────────────────────────────────────
+ber = not na(ph2) and not na(pl1) and not na(ph1) and ph2b < pl1b and pl1b < ph1b and ph1 < ph2 and pl1 < ph2 and pl1 < ph1
+
+eA  = ber ? ph2 : float(na)
+eB  = ber ? pl1 : float(na)
+eC  = ber ? ph1 : float(na)
+eT  = ber ? (eB * eC) / eA : float(na)
+
+epAB = ber ? ((eA - eB) / eA) * 100 : float(na)
+epBC = ber ? ((eC - eB) / eB) * 100 : float(na)
+epCT = ber ? ((eC - eT) / eC) * 100 : float(na)
+
+// ── FAILURE ──────────────────────────────────────────────────
+bFail = bul and close < bC and barstate.isconfirmed
+eFail = ber and close > eC and barstate.isconfirmed
+
+// ── TP/SL ────────────────────────────────────────────────────
+bullTP = useCustomTP and customTP > 0 ? customTP : bT
+float bullSL_auto = bC * (1 - bullSLPercent / 100)
+float bullSL = useCustomSL and customSL > 0 ? customSL : bullSL_auto
+bullSL := na(bullSL) ? bullSL_auto : bullSL
+
+bearTP = useCustomTP and customTP > 0 ? customTP : eT
+float bearSL_auto = eC * (1 + bearSLPercent / 100)
+float bearSL = useCustomSL and customSL > 0 ? customSL : bearSL_auto
+bearSL := na(bearSL) ? bearSL_auto : bearSL
+
+// ── HELPERS ──────────────────────────────────────────────────
+f_pct(v) => str.tostring(v, "#.1") + "%"
+f_pr(v)  => str.tostring(v, format.mintick)
+f_eq_price(a, b, ticks) =>
+    not na(a) and not na(b) and math.abs(a - b) <= (syminfo.mintick * ticks)
+
+// ── SIGNAL LOGIC (PATCHED) ───────────────────────────────────
+bullStableLegacy = f_eq_price(bC, bC[1], cToleranceTicks)
+bearStableLegacy = f_eq_price(eC, eC[1], cToleranceTicks)
+
+// No-lag mode: fire when the pattern becomes active (C confirmation bar close).
+bullSignalNoLag = enableTradeSignals and bul and not bul[1]
+bearSignalNoLag = enableTradeSignals and ber and not ber[1]
+
+// Legacy mode: keep next-bar gate but remove strict float equality.
+bullSignalLegacy = enableTradeSignals and bul[1] and not bul[2] and bul and bullStableLegacy
+bearSignalLegacy = enableTradeSignals and ber[1] and not ber[2] and ber and bearStableLegacy
+
+bullCSignal = signalMode == "On C Confirmation (No Extra Bar)" ? bullSignalNoLag : bullSignalLegacy
+bearCSignal = signalMode == "On C Confirmation (No Extra Bar)" ? bearSignalNoLag : bearSignalLegacy
+
+// ── DRAW ─────────────────────────────────────────────────────
+if barstate.islast
+
+    // BULLISH
+    if showBuy and bul
+        if showPath
+            line.new(pl2b, bA, ph1b, bB, color=color.new(cBuy, 30), width=2)
+            line.new(ph1b, bB, pl1b, bC, color=color.new(cBuy, 30), width=2)
+            if showPct
+                mAB = math.round((pl2b + ph1b) / 2)
+                label.new(mAB, math.avg(bA, bB), "+" + f_pct(bpAB), color=color.new(cBuy, 20), textcolor=color.white, style=label.style_label_left, size=size.small)
+                mBC = math.round((ph1b + pl1b) / 2)
+                label.new(mBC, math.avg(bB, bC), "-" + f_pct(bpBC), color=color.new(cBuy, 20), textcolor=color.white, style=label.style_label_right, size=size.small)
+
+        label.new(pl2b, bA, "▲ A\n" + f_pr(bA), color=cBuy, textcolor=color.black, style=label.style_label_up, size=size.large)
+        label.new(ph1b, bB, "▼ B\n" + f_pr(bB), color=cBuy, textcolor=color.black, style=label.style_label_down, size=size.large)
+        label.new(pl1b, bC, "▲ C\n" + f_pr(bC), color=cBuy, textcolor=color.black, style=label.style_label_up, size=size.large)
+
+        line.new(pl1b, bC, bar_index + 20, bC, color=cBuy, width=2)
+
+        if showTgt
+            line.new(pl1b, bT, bar_index + 20, bT, color=cTarget, width=2, style=line.style_dashed)
+            tStr = showPct ? "🎯 TARGET\n" + f_pr(bT) + "\n+" + f_pct(bpCT) : "🎯 TARGET\n" + f_pr(bT)
+            label.new(bar_index + 20, bT, tStr, color=cTarget, textcolor=color.black, style=label.style_label_left, size=size.normal)
+
+        if showTPSL
+            line.new(pl1b, bullTP, bar_index + 100, bullTP, color=color.new(color.lime, 0), width=2, style=line.style_dashed, xloc=xloc.bar_index)
+            label.new(bar_index + 50, bullTP, "TP: " + f_pr(bullTP), color=color.new(color.lime, 0), textcolor=color.white, style=label.style_label_left, size=size.small)
+            line.new(pl1b, bullSL, bar_index + 100, bullSL, color=color.new(color.red, 0), width=2, style=line.style_dashed, xloc=xloc.bar_index)
+            label.new(bar_index + 50, bullSL, "SL: " + f_pr(bullSL), color=color.new(color.red, 0), textcolor=color.white, style=label.style_label_left, size=size.small)
+
+    // BEARISH
+    if showSell and ber
+        if showPath
+            line.new(ph2b, eA, pl1b, eB, color=color.new(cSell, 30), width=2)
+            line.new(pl1b, eB, ph1b, eC, color=color.new(cSell, 30), width=2)
+            if showPct
+                mAB = math.round((ph2b + pl1b) / 2)
+                label.new(mAB, math.avg(eA, eB), "-" + f_pct(epAB), color=color.new(cSell, 20), textcolor=color.white, style=label.style_label_right, size=size.small)
+                mBC = math.round((pl1b + ph1b) / 2)
+                label.new(mBC, math.avg(eB, eC), "+" + f_pct(epBC), color=color.new(cSell, 20), textcolor=color.white, style=label.style_label_left, size=size.small)
+
+        label.new(ph2b, eA, "▼ A\n" + f_pr(eA), color=cSell, textcolor=color.white, style=label.style_label_down, size=size.large)
+        label.new(pl1b, eB, "▲ B\n" + f_pr(eB), color=cSell, textcolor=color.white, style=label.style_label_up, size=size.large)
+        label.new(ph1b, eC, "▼ C\n" + f_pr(eC), color=cSell, textcolor=color.white, style=label.style_label_down, size=size.large)
+
+        line.new(ph1b, eC, bar_index + 20, eC, color=cSell, width=2)
+
+        if showTgt
+            line.new(ph1b, eT, bar_index + 20, eT, color=cTarget, width=2, style=line.style_dashed)
+            tStr = showPct ? "🎯 TARGET\n" + f_pr(eT) + "\n-" + f_pct(epCT) : "🎯 TARGET\n" + f_pr(eT)
+            label.new(bar_index + 20, eT, tStr, color=cTarget, textcolor=color.black, style=label.style_label_left, size=size.normal)
+
+        if showTPSL
+            line.new(ph1b, bearTP, bar_index + 100, bearTP, color=color.new(color.red, 0), width=2, style=line.style_dashed, xloc=xloc.bar_index)
+            label.new(bar_index + 50, bearTP, "TP: " + f_pr(bearTP), color=color.new(color.red, 0), textcolor=color.white, style=label.style_label_left, size=size.small)
+            line.new(ph1b, bearSL, bar_index + 100, bearSL, color=color.new(color.lime, 0), width=2, style=line.style_dashed, xloc=xloc.bar_index)
+            label.new(bar_index + 50, bearSL, "SL: " + f_pr(bearSL), color=color.new(color.lime, 0), textcolor=color.white, style=label.style_label_left, size=size.small)
+
+// ── SIGNAL MARKERS ───────────────────────────────────────────
+plotshape(showSignalMarkers and bullCSignal, title="BUY Trigger", style=shape.labelup, text="BUY", color=color.new(color.lime, 0), textcolor=color.white, location=location.belowbar, size=size.tiny)
+plotshape(showSignalMarkers and bearCSignal, title="SELL Trigger", style=shape.labeldown, text="SELL", color=color.new(color.red, 0), textcolor=color.white, location=location.abovebar, size=size.tiny)
+
+// ── PLOTS ────────────────────────────────────────────────────
+plot(bul ? bT : na, "Bull Target", color=cTarget, linewidth=1, style=plot.style_circles)
+plot(ber ? eT : na, "Bear Target", color=cTarget, linewidth=1, style=plot.style_circles)
+
+// ── TRADE SIGNAL ALERTS ──────────────────────────────────────
+alertcondition(bullCSignal, "BUY at ABC C Level", "Bullish ABC pattern - BUY signal at C level")
+alertcondition(bearCSignal, "SELL at ABC C Level", "Bearish ABC pattern - SELL signal at C level")
+
+if bullCSignal
+    bullC_signal = bC
+    bullTP_signal = bullTP
+    bullSL_signal = bullSL
+    bullRR = str.tostring(math.round((bullTP_signal - bullC_signal) / (bullC_signal - bullSL_signal), 2))
+    bullAlertMsg = '{"indicator_id":"abc_pattern_no_lag","strategy_id":"abc_geometric","symbol":"' + syminfo.ticker + '","action":"BUY","risk":1.0,"meta":{"tp":' + str.tostring(bullTP_signal, format.mintick) + ',"sl":' + str.tostring(bullSL_signal, format.mintick) + ',"c_level":' + str.tostring(bullC_signal, format.mintick) + ',"rr":"' + bullRR + ':1"}}'
+    alert(bullAlertMsg, alert.freq_once_per_bar_close)
+
+if bearCSignal
+    bearC_signal = eC
+    bearTP_signal = bearTP
+    bearSL_signal = bearSL
+    bearRR = str.tostring(math.round((bearC_signal - bearTP_signal) / (bearSL_signal - bearC_signal), 2))
+    bearAlertMsg = '{"indicator_id":"abc_pattern_no_lag","strategy_id":"abc_geometric","symbol":"' + syminfo.ticker + '","action":"SELL","risk":1.0,"meta":{"tp":' + str.tostring(bearTP_signal, format.mintick) + ',"sl":' + str.tostring(bearSL_signal, format.mintick) + ',"c_level":' + str.tostring(bearC_signal, format.mintick) + ',"rr":"' + bearRR + ':1"}}'
+    alert(bearAlertMsg, alert.freq_once_per_bar_close)
+
+// ── PATTERN STATE UPDATES ────────────────────────────────────
+var float lastSentBullC = na
+var float lastSentBearC = na
+
+bool bullPatternChanged = bul and (na(lastSentBullC) or not f_eq_price(bC, lastSentBullC, cToleranceTicks))
+bool bearPatternChanged = ber and (na(lastSentBearC) or not f_eq_price(eC, lastSentBearC, cToleranceTicks))
+bool bullPatternGone = not bul and not na(lastSentBullC)
+bool bearPatternGone = not ber and not na(lastSentBearC)
+
+if bullPatternChanged
+    lastSentBullC := bC
+    alert('{"indicator_id":"abc_pattern_no_lag","action":"pattern_update","symbol":"' + syminfo.ticker + '","meta":{"pattern":"bullish","c_level":' + str.tostring(bC, format.mintick) + ',"active":true}}', alert.freq_once_per_bar_close)
+
+if bullPatternGone
+    lastSentBullC := na
+    alert('{"indicator_id":"abc_pattern_no_lag","action":"pattern_update","symbol":"' + syminfo.ticker + '","meta":{"pattern":"bullish","c_level":0,"active":false}}', alert.freq_once_per_bar_close)
+
+if bearPatternChanged
+    lastSentBearC := eC
+    alert('{"indicator_id":"abc_pattern_no_lag","action":"pattern_update","symbol":"' + syminfo.ticker + '","meta":{"pattern":"bearish","c_level":' + str.tostring(eC, format.mintick) + ',"active":true}}', alert.freq_once_per_bar_close)
+
+if bearPatternGone
+    lastSentBearC := na
+    alert('{"indicator_id":"abc_pattern_no_lag","action":"pattern_update","symbol":"' + syminfo.ticker + '","meta":{"pattern":"bearish","c_level":0,"active":false}}', alert.freq_once_per_bar_close)
+
+// ── FAILURE ALERTS ───────────────────────────────────────────
+alertcondition(bFail, "Bull FAILED", "Bullish ABC failed - close below C")
+alertcondition(eFail, "Bear FAILED", "Bearish ABC failed - close above C")
+
