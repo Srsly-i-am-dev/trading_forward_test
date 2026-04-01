@@ -1,0 +1,18 @@
+The video outlines three distinct systems, referred to as the MACD Money Map, designed to improve trading profitability. (0:02 - 0:10)System 1: The Trend System (Trend Trading Strategy)
+
+Setup: This system uses the Zero Line as a filter for bias. Above zero, look for buys; below zero, look for sells. (1:34 - 2:03)
+Entry Logic: Distance Rule - Enter on a crossover only when MACD is far from the zero line (above 0.5 or below -0.5). Wait 2-3 candles after the cross for confirmation. (4:00 - 5:23)
+Exit Logic: Trail the stop loss with the opposite MACD crossover. (13:37)
+Win Rate/Profit Factor: The speaker claims a 60% win rate simply by following the Zero Line rule. (2:36 - 2:40)
+System 2: The Reversal System (Divergence Strategy)
+
+Setup: Spot Divergence where price makes a new high/low, but the MACD makes a lower high/higher low. (6:22 - 7:21)
+Entry Logic: After spotting divergence, wait for histogram confirmation: a color flip (e.g., first green bar after red), a shrinking tower, or a zero bounce. (7:37 - 8:51)
+Exit Logic: Trail the stop loss with the opposite MACD crossover. (13:37)
+Win Rate/Profit Factor: Combines with System 3 for high-probability setups. (8:52)
+System 3: The Confirmation System (Multi-Timeframe Strategy)
+
+Setup: This filters signals by aligning three timeframes: Daily (Trend/Bias), 4-Hour (Setup), and 1-Hour (Entry). (9:45 - 10:11)
+Entry Logic: All three timeframes must agree. If Daily is bullish, look for a 4-hour bullish crossover, and trigger on a 1-hour histogram flip. (10:12 - 10:33)
+Exit/Risk Logic: Stop goes at the recent swing high/low. Target is two times the risk (2R). Take half off at 2R, move stop to break-even, and trail the rest. (13:21 - 13:37)
+Win Rate/Profit Factor: The video title mentions a 71% win rate achieved in a month using these methods. (Video Title)

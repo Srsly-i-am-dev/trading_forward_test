@@ -1,0 +1,21 @@
+THREE BUY / SELL INDIS BY TRADING NOTES 
+
+:Rank #3: Two-Pole Oscillator Strategy (0:52)
+
+Indicator: Two-Pole Oscillator (by Big Beluga) combined with the Volumeatic Variable Index Dynamic Average (Video) indicator (1:03 - 5:15).
+
+Entry Point: For a long trade, enter after the close of the second candle following a blue upward arrow from the oscillator. This signal must print below the 0.5 level. Concurrently, the Video indicator must be green with a delta volume of at least 20% (5:57 - 7:05).
+
+Exit Point: Place the stop-loss below the indicator's invalidation level (dotted line). Set the take-profit at 1.5 times the risk (7:06 - 7:15).Rank #2: Zero Lag Trend Signals Strategy (8:33)
+
+Indicator: Zero Lag Trend Signals (by Algo Alpha) combined with the Momentum Bias Index (10:09 - 13:25).
+
+Entry Point: For a long trade, wait for a green mini upward arrow (pullback signal) while the trend ribbon is green. Confirm using the Momentum Bias Index: the histogram bar must be bright green and extend beyond the dotted threshold line (13:33 - 14:00).
+
+Exit Point: Place the stop-loss at the peak of the buy signal. Set the take-profit at two times the risk (14:09 - 14:19).Rank #1: DIY Custom Strategy Builder (15:40)
+
+Indicator: DIY Custom Strategy Builder (by ZPY) configured with Super Trend (leading indicator), 200 EMA, and MACD (confirmation indicators) (16:10 - 19:25).
+
+Entry Point: A buy signal is generated when all conditions align on a candle close: Super Trend flips bullish, price closes above the 200 EMA, and the MACD meets bullish conditions. It is ideal to enter when the signal aligns with a demand zone (visualized on the chart) and a vibrant green candle (17:26 - 17:50).
+
+Exit Point: Place the stop-loss below the recent swing low. Aim for a take-profit of at least 1.5 times the risk, moving the stop-loss to break-even once the price achieves a 1:1 ratio (22:15 - 22:35).

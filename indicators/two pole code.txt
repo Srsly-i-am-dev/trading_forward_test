@@ -1,0 +1,166 @@
+// This work is licensed under Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International  
+// https://creativecommons.org/licenses/by-nc-sa/4.0/
+// © BigBeluga
+
+//@version=6
+indicator("Two-Pole Oscillator [BigBeluga]", max_labels_count = 500, max_lines_count = 500)
+
+// ＩＮＰＵＴＳ ――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――{
+int   length   = input.int(15, minval=1, title="Filter Length")
+bool  disp_lvl = input.bool(true, "Levels")
+
+color up_color = input.color(#55ffda, "", inline = "color")
+color dn_color = input.color(#8c5bff, "", inline = "color")
+
+var buy_line = line(na)
+var sell_line = line(na)
+// }
+
+
+// ＣＡＬＣＵＬＡＴＩＯＮＳ――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――{
+float sma1   = ta.sma(close, 25)
+float sma_n1 = ((close - sma1) - ta.sma(close - sma1, 25)) / ta.stdev(close - sma1, 25)
+float area   = ta.sma(high-low, 100)
+
+// Two-pole smooth filter function
+f_two_pole_filter(source, length) =>
+    var float smooth1 = na
+    var float smooth2 = na
+    alpha = 2.0 / (length + 1)
+
+    if na(smooth1)
+        smooth1 := source
+    else
+        smooth1 := (1 - alpha) * smooth1 + alpha * source
+
+    if na(smooth2)
+        smooth2 := smooth1
+    else
+        smooth2 := (1 - alpha) * smooth2 + alpha * smooth1
+
+// Oscillator
+two_p = f_two_pole_filter(sma_n1, length)
+two_pp = two_p[4]
+
+// Colors
+color buy_col1  = color.from_gradient(two_p, -1, 0.5, up_color, na)
+color buy_col2  = color.from_gradient(two_p, -1, 0.5, color.new(up_color, 50), na)
+color sell_col1 = color.from_gradient(two_p, -0.5, 1, na, dn_color)
+color sell_col2 = color.from_gradient(two_p, -0.5, 1, na, color.new(dn_color, 50))
+color color     = two_p > two_pp 
+                  ? color.from_gradient(two_p, -1,1, up_color, color.new(up_color, 0)) 
+                  : color.from_gradient(two_p, -1,1,color.new(dn_color, 0), dn_color)
+
+
+// Signals
+bool buy  = ta.crossover(two_p, two_pp) and two_p < 0 and barstate.isconfirmed
+bool sell = ta.crossunder(two_p, two_pp) and two_p > 0 and barstate.isconfirmed
+
+// }
+
+
+// ＰＬＯＴ ――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――{
+if buy //and two_p < -0.5
+    sell_line := line(na)
+
+    if disp_lvl
+        buy_line := line.new(
+                             bar_index
+                             , low[0] - area
+                             , bar_index
+                             , low[0] - area
+                             , force_overlay = true
+                             , color = buy_col1
+                             , style = line.style_dashed
+                             )
+
+    label.new(bar_index, low[0] - area
+             , color = buy_col1, style = label.style_label_up, force_overlay = true, size = size.tiny)
+
+    label.new(bar_index, low[0] - area*1.5
+             , color = color.new(color.black, 100)
+             , text = str.tostring(low[0] - area)
+             , style = label.style_label_up
+             , force_overlay = true
+             , size = size.small
+             , textcolor = color.new(chart.fg_color, 30))
+
+if ta.crossunder(low, buy_line.get_y1()) and barstate.isconfirmed
+    label.new(
+               bar_index
+             , buy_line.get_y1()
+             , color = color.new(up_color, 100)
+             , style = label.style_label_center
+             , force_overlay = true
+             , size = size.large
+             , text = "✖"
+             , textcolor = up_color
+             )
+
+    buy_line := line(na)
+
+if sell //and two_p > 0.5
+    buy_line := line(na)
+    if disp_lvl
+        sell_line := line.new(
+                             bar_index
+                             , high[0] + area
+                             , bar_index
+                             , high[0] + area
+                             , force_overlay = true
+                             , color = sell_col1
+                             , style = line.style_dashed
+                             )
+
+    label.new(bar_index, high[0] + area
+             , color = sell_col1, style = label.style_label_down, force_overlay = true, size = size.tiny)
+
+
+    label.new(bar_index, high + area*1.5
+             , color = color.new(color.black, 100)
+             ,  text = str.tostring(high+area)
+             , style = label.style_label_down
+             , force_overlay = true
+             , size = size.small
+             , textcolor = color.new(chart.fg_color, 30))
+
+    
+if ta.crossover(high, sell_line.get_y1()) and barstate.isconfirmed
+    label.new(
+               bar_index
+             , sell_line.get_y1()
+             , color = color.new(dn_color, 100)
+             , style = label.style_label_center
+             , force_overlay = true
+             , size = size.large
+             , text = "✖"
+             , textcolor = dn_color
+             )
+
+    sell_line := line(na)
+
+switch
+    not na(buy_line)  => buy_line. set_x2(bar_index)
+    not na(sell_line) => sell_line.set_x2(bar_index)
+
+plotshape(buy ? two_p[0] : na, "Buy", shape.circle, location.absolute, buy_col2, 0, size = size.small)
+plotshape(buy ? two_p[0] : na, "Buy", shape.circle, location.absolute, buy_col1, 0, size = size.tiny)
+
+plotshape(sell ? two_p[0] : na, "Sell", shape.circle, location.absolute, sell_col2, 0, size = size.small)
+plotshape(sell ? two_p[0] : na, "Sell", shape.circle, location.absolute, sell_col1, 0, size = size.tiny)
+
+p11 = plot(1, color = color.new(chart.fg_color, 80))
+plot(0.5, color = color.new(chart.fg_color, 50))
+p00 = plot(0, color = color.new(bar_index % 2 == 0 ? chart.fg_color : na, 0))
+plot(-0.5, color = color.new(chart.fg_color, 50))
+p_1 = plot(-1, color = color.new(chart.fg_color, 80))
+
+fill(p11, p00, 2, -1, color.new(chart.fg_color, 80), na)
+fill(p_1, p00, 1, -2, na, color.new(chart.fg_color, 80))
+
+
+p1 = plot(two_p, color = color, linewidth = 1)
+p2 = plot(two_pp, display = display.none)
+
+fill(p1, p2, two_p, two_pp, color, na)
+// }

@@ -1,0 +1,59 @@
+The video outlines a 1-minute price action scalping strategy using Smart Money Concepts (SMC) such as liquidity, supply and demand, and market structure breaks. Here are the detailed setups mentioned:Setup 1: Institutional Candle + Inside Bars Breakout (0:22 - 4:40)
+
+Fundamentals/Context: This setup identifies market contraction (consolidation) followed by expansion (breakout). Big players create a tight range to build positions without alerting other traders and to create liquidity via stop losses above and below the range.
+
+Setup:
+
+Identify an Institutional Candle: A larger candle that sets the initial range (High/Low).
+Wait for 8 to 10+ Inside Bars: Smaller candles forming entirely within the High and Low of the Institutional Candle.
+Entry Logic:
+
+Buy: Enter when price breaks above the high of the channel.
+Sell: Enter when price breaks below the low of the channel.
+Note: The signal is stronger if it occurs near a support or demand level.
+Exit Logic (Management):
+
+Stop Loss: Place below the low of the contraction phase for a buy, or above the high for a sell.
+Take Profit: Target a move equal to the size of the move before the contraction phase, or at minor support/resistance levels.
+RRR: Not explicitly quantified, but aims for trend continuation based on prior wave size.Setup 2: False Breakout (Liquidity Sweep) (10:03 - 14:40)
+
+Fundamentals/Context: Big players push price just outside the channel to trigger stop orders (liquidity) and trap breakout traders, only to reverse price quickly in the opposite direction.
+
+Setup: A Pin Bar forms with its wick extending outside the channel (High/Low of the Institutional Candle), but the body closes back inside.
+
+Entry Logic:
+
+Buy: Enter when price retraces back into the channel after a false breakout below.
+Sell: Enter when price retraces back into the channel after a false breakout above.
+Exit Logic (Management):
+
+Stop Loss: Just outside the wick of the pin bar.
+Take Profit: At the opposite side of the channel, or at key support/resistance levels.
+RRR: Not explicitly quantified.Setup 3: Pin Bar + Inside Bar Combo (19:50 - 23:13)
+
+Fundamentals/Context: Used when no clear Institutional Candle is present. It relies on a rejection candle at a key level followed by a consolidation pause.
+
+Setup:
+
+Identify a Pin Bar (wick is at least 50% of total range) at a support/resistance or demand/supply level.
+Wait for an Inside Bar to form immediately after, indicating a pause in volatility.
+Entry Logic:
+
+Buy: Enter on the break of the High of the Inside Bar, in the direction of the Pin Bar.
+Sell: Enter on the break of the Low of the Inside Bar, in the direction of the Pin Bar.
+Exit Logic (Management):
+
+Stop Loss: Below the low of the pin bar for a buy, or above the high for a sell.
+Take Profit: At the next opposing support or resistance level.
+RRR: Not explicitly quantified.Master Setup Strategy (Confluence Checklist) (23:13 - 25:55)
+
+Trend Alignment: Only take trades in the direction of the higher timeframe trend.
+
+Confluence: The setup must occur at a key level (support/resistance, unmitigated supply/demand, Fibonacci level).
+
+Pattern Strength: For breakout strategies, demand 8+ inside bars for maximum tension; for pin bars, look for long wicks indicating strong rejection.
+
+Volume: High volume on the entry bar compared to previous candles strengthens the signal.
+
+
+for ai:-

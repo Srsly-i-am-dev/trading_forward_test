@@ -14,7 +14,20 @@
       "Bash(where ngrok:*)",
       "Read(//c/Users/DEV/**)",
       "Bash(grep -E \"\\\\.\\(md|txt\\)$\")",
-      "Bash(curl -s -X POST http://localhost:5000/webhook -H \"Content-Type: application/json\" -H \"X-Webhook-Token: pBNYsisvmd7kxs9nNGRk7_Gk--V3Ep23wNbmmx44Oog\" -d '{\"\"indicator_id\"\":\"\"abc_pattern_enhanced\"\",\"\"strategy_id\"\":\"\"abc_geometric\"\",\"\"symbol\"\":\"\"EURUSD\"\",\"\"action\"\":\"\"BUY\"\",\"\"risk\"\":1.0,\"\"meta\"\":{\"\"tp\"\":1.09000,\"\"sl\"\":1.08500,\"\"c_level\"\":1.08600,\"\"rr\"\":\"\"1.5:1\"\"}}')"
+      "Bash(curl -s -X POST http://localhost:5000/webhook -H \"Content-Type: application/json\" -H \"X-Webhook-Token: pBNYsisvmd7kxs9nNGRk7_Gk--V3Ep23wNbmmx44Oog\" -d '{\"\"indicator_id\"\":\"\"abc_pattern_enhanced\"\",\"\"strategy_id\"\":\"\"abc_geometric\"\",\"\"symbol\"\":\"\"EURUSD\"\",\"\"action\"\":\"\"BUY\"\",\"\"risk\"\":1.0,\"\"meta\"\":{\"\"tp\"\":1.09000,\"\"sl\"\":1.08500,\"\"c_level\"\":1.08600,\"\"rr\"\":\"\"1.5:1\"\"}}')",
+      "Bash(pip install:*)",
+      "Bash(where python:*)",
+      "Bash(where python3:*)",
+      "Bash(where pip:*)",
+      "Bash(where pip3:*)",
+      "Bash(C:UsersDEVAppDataLocalPythonbinpython.exe -m pip install beautifulsoup4 plotly -q)",
+      "Bash(\"C:/Users/DEV/AppData/Local/Python/bin/python.exe\" -m pip install beautifulsoup4 plotly -q)",
+      "Bash(curl -s http://localhost:8502)",
+      "Bash(curl -s http://localhost:8503)",
+      "Bash(curl -s http://localhost:8503/_stcore/health)",
+      "Bash(curl -s http://localhost:8503/_stcore/stream)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill //F //PID 3304 //PID 28300 //PID 3360)"
     ]
   }
 }

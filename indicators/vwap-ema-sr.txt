@@ -1,0 +1,179 @@
+So let's get started. The first thing that we need to do is go over to our indicators tab and type in volume weighted average price. You're going to see right here, this indicator pops up. I don't use any of the other ones. I use volume weighted average price, and that is it. And this is the only indicator that you need on your chart. Literally like you can remove everything else. This is the only one that actually matters in my opinion. Now, what we're going to do is we're going to change the way that this looks a little bit.
+
+S
+Speaker
+00:50
+First off, before we do that, I want to tell you, we're going to go over literally how to set the entire indicator up, the whole custom trading strategy. And then I'm going to show you at the very end of this video, the biggest mistakes that people make while trading VWAP. And I'm going to try to do this all in under 15 minutes for you. Slow the video down, pause it if you have to. I want this to be a good video for you and just break down everything. So here's the custom setup.
+
+S
+Speaker
+01:13
+We're going to double click here and go to the settings. We're going to turn off upper band one, lower band one and bands fill one, right? I just want this blue line on my chart because everything else to me personally doesn't matter. I'm going to trade this blue line only and this is the only thing that I actually care about. Now, here's how VWAP actually works, guys.
+
+S
+Speaker
+01:33
+What you're going to notice on VWAP is that it follows trend very closely, right? So if trend is moving like this, you're going to see VWAP moving along with it. Now, since this is a it's essentially like a moving average where it moves with the price, but it also includes volume as well. So one thing that you will see is if price is moving like this, but then starts to consolidate, VWAP will move up sharply and then have a giant flat line at the end here.
+
+S
+Speaker
+01:59
+So for my trading, the number one thing that I want to do is I don't want to trade while price is flat. I don't want to trade when VWAP is flat.
+
+S
+Speaker
+02:08
+So what we're looking for here is something like this. If VWAP stays anything like this, I'm avoiding pretty much the entire day. And so this is how I avoid some of my biggest losing days. And some of you see online people losing thousands and thousands of dollars trading. If you just throw this indicator on your chart, you would exactly know when to skip, right? You'd know when to skip and you know exactly when to take trades. And so
+
+S
+Speaker
+02:32
+Using this indicator, the only thing I want to do is take sharp moves because those sharp moves are going to have the most momentum behind them. Now, this is live, so I'm going to be drinking water, and hopefully that doesn't slow down my explanation.
+
+S
+Speaker
+02:45
+So we know exactly what VWAP is, right? The next thing we have to understand is how to actually use the indicator. And so for me, I am a trend-based trader. I want to make sure that no matter what I'm doing, I'm trading inside of the trend because as you know, the trend is your friend. That's what everybody says. So what we're going to do is we're going to go to the higher timeframe, something like the one hour, the four hour. You could consider the 15 minute, but typically if I'm going to be finding trend, I'm going to the one hour.
+
+S
+Speaker
+03:12
+And I want to make sure that I am trading along with the trend. So for example, here we know that we have an uptrend. And the only way for us to have a downtrend is if we break this area right here. Because if we break this low, then we end up flipping to the downside. So in this scenario, when I want to take a trade to the downside, I have to have that change of character.
+
+S
+Speaker
+03:33
+Now, what I'm going to do is show you guys exactly what happens when you drop to the five-minute timeframe. This is the timeframe that I use most on this trading strategy is going to be the five-minute. We have that low there that we need to see get broken for us to actually have trend in our favor. So this is the first example I'm going to show you of this trading strategy. What we need to see is a breakthrough VWAP.
+
+S
+Speaker
+03:57
+Right. And let me start a new replay. I know you guys hate replay, but I want to show you exactly how the strategy works. If you want to see a live trade, comment the word live trade or comment. Just let me know that you want to see live trades down below and I will show you live trades. But here's the deal. I can't really explain the strategy perfectly for you guys live because I'm trading. Right. So let's go over this right now.
+
+S
+Speaker
+04:20
+So the first thing we need to see is going to be a break of VWAP to the downside. We know that we want downside because like I showed you earlier, we have that change of character. So when we get that change of character there, we need to see a retest of VWAP. So this next candle that comes out,
+
+S
+Speaker
+04:38
+The next thing we need to see is a retest of VWAP. So here in this situation, we get that retest of VWAP. The next thing I'd want to see, and this is a part of my TFC entry model that I talk about all of the time, is going to be a continuation, right? I am a continuation-based trader. I trade based off of the momentum of the market. That's why you see me having massive moves all the time on social media because, excuse me,
+
+S
+Speaker
+05:05
+I want to make sure that I capitalize on the biggest moves that are happening at the time. And so, the biggest way to do that is by catching the trend, right?
+
+S
+Speaker
+05:14
+So this continuation is going to be when we continue down here to break lows. So if we see a low break, I'm interested in shorts in this scenario. Now I'm going to show you another scenario. If time permits, I'm looking at the time right now, we have nine minutes and 50 seconds left. So I'm going to go over as many scenarios as I possibly can and break this strategy just as full in depth as I can in 15. So.
+
+S
+Speaker
+05:37
+We have that break of that low right there, right? That's what we're looking for for us to get into this position. Now, stop losses while using this strategy are going to be over VWAP pretty much always, right? I want stop losses over VWAP and I want stop losses over the previous candle high if I can get that. So if we take a look at higher timeframe, right? Let's see if we have any good stop losses for us.
+
+S
+Speaker
+06:03
+So there's two potential targets, not stop losses. There's two potential targets that I'm looking for here, which is going to be this area down here, which is just where that overall resting liquidity is. And of course, if you guys have watched my videos before, you know that I use fibs quite often. So we would use this as a first target potentially and use this as our final target. So I'll go ahead and throw this final target on the chart and let's go back to the five minute timeframe. So what we're looking for is an entry below this low.
+
+S
+Speaker
+06:33
+We'll see what happens on the next candle. We don't get an entry here. Beautiful. We're going to move it and we just go to the next candle after that, right? Well, all I'm looking for is a break of lows. I don't care which candle gets broken. I want to see the break of lows. Now we're going to look to see which one breaks. This low gets broken right here, which means that we are going to most likely get an entry right there to the downside on the break of that low.
+
+S
+Speaker
+07:02
+Stop losses, like I said, go above the previous candle high targets come all the way down here. This is a 491 tick position, which is really nice. So let's see what happens at this point. We have that entry and all we need to see now is the failure to continue down. Beautiful, right? We see the same thing happening literally every single day in the market.
+
+S
+Speaker
+07:24
+This is the entry model that I use every single day. Trade with the trend, failure, continuation. But here's the deal. You're probably still using this indicator wrong because a lot of people don't realize that there's one main thing that you can do on the exit side that makes things so powerful using it. So when it comes to VWAP and when it comes to using this, right?
+
+S
+Speaker
+07:46
+A lot of people just exit right here at their final target and they call it a day. Well, there's something that you can do since VWAP rides with the trend. There's two things you can do. The first is that you exit whenever price breaks VWAP to the upside. So for example, if we let this trend just continue and continue, we would exit here in this area. But for me, for my exits, the way that I like to do them is by adding a second indicator and going to moving average exponential.
+
+S
+Speaker
+08:13
+right we're going to add this indicator right here this is the 9 ema and i throw this on my chart as an entry point or as an exit point so that way you can see exactly where to exit on this chart and it's typically going to be in this area right here when we close above that 9 ema so that's if you want to hold trades longer now let's find another scenario right here so that way i can show you exactly how vwap works even further we can just literally go right here for example we have our trend right
+
+S
+Speaker
+08:42
+And I'm just going to do the same thing over and over for you guys. So that way you see the actual potential of this strategy. We see that we're pushing up and we're coming back down to VWAP, right? Now, all we need to see is a push up over highs. Okay. It's the same thing every single time. We're going to look for a push up over highs with a stop loss below VWAP. And we're going to look for targets to be up where there is an area of liquidity. So
+
+S
+Speaker
+09:09
+That would be for here would be this area right here, right? Just looking for the next big area of liquidity up. And that happens to be right there for this area. So
+
+S
+Speaker
+09:19
+On this position here, we see a 1.6 to 1 risk to reward, profitable trade if we can get it. And the next candle ends up not seeing that break. So now we're going to go based on the next candle in the sequence. And stop losses are going to go below the previous candle low. This is what we're doing pretty much every single time. We're going to see if we can get that break of those highs, which we do end up getting.
+
+S
+Speaker
+09:41
+And we enter right there on the break. I don't enter on the close of the candle because for me, I want to make sure that I get the best entry possible, right? If you entered on the close of the candle, you would have entered all the way over...
+
+S
+Speaker
+09:56
+here if you had waited for a close of the candle right for me i'm getting this entry and i'm catching so much more on this move and so we just want to let this trade run from there and see if we can get ourselves a push all the way up to targets now first target for this trade probably would have been up here for me second target would have been this area where we were at right now and as you can see this trade ends up being extremely profitable for us we get full target hit which i didn't know that that was going to happen but we get full target hit right there
+
+S
+Speaker
+10:23
+Now, that's a bearish or a bullish example, and we had a bearish example. Here's some things that we have to pay attention to and what to avoid when we're trading this strategy. The first is going to be if we don't get a break of lows, right? A lot of people are going to try to find this rejection or reversal trade here, this one right here where they're like, okay, we can get this reversal and push to the downside.
+
+S
+Speaker
+10:46
+If you do not see a break of lows, there is no point of trading this trade, right? Even if it comes down and taps the lows and then bounces off, right? Even if it comes down to tap those lows, we are not going to enter. We want to see a break of the lows for us to get into anything. Now, in this scenario, we still have bullish trends, so there's no reason to even do that. But let's say that you were trading here, right?
+
+S
+Speaker
+11:14
+let's go with this example right here. We only have four minutes left, so I'm going to make sure I break this down for you as quickly as I possibly can. But here in this scenario, if we had this entry that we were looking for, which you know that we are looking for a break, a retest of that level, and then a break of lows. If we had just come down and stopped right here,
+
+S
+Speaker
+11:33
+and then flipped, we're not going to enter there, right? We want to see a smooth break of lows for us to get that entry. And as you can see here, this ends up being an extremely profitable position. Now, I know what you're thinking. Do it live, right? Well, guys, there's not that many opportunities. As you can see, here's one area. Here's another area. Both of them have trades present.
+
+S
+Speaker
+11:54
+If we go the next day, there's only one area with a trade present. So take a look. This sets you up for one trade per day and all of your trades that you're taking are going to be bangers, right? Even if that's the case, even if you're getting a trade that's multiple trades per day, we're not going to be taking that because look, this is a flat line in VWAP. We're going to be avoiding that as much as we possibly can. We want to trade inside of actual like real conditions in the market, not this garbage. So
+
+S
+Speaker
+12:21
+Let's take a look and wait for a day that we actually get a smooth move, which is going to be this day right here. The easiest entry model of all time. I'm telling you, this is the TFC entry model trend fail. Continue simplest thing that you can ever do in your entire life. Take a look how we come up over VWAP here. We retest the VWAP and then we continue to the upside. All we want to do is enter on the break of this high. That's it.
+
+S
+Speaker
+12:46
+Put your stop loss underneath VWAP and put your target up to the next area of liquidity, which I would assume is this area right here. I don't know how much further this ends up going, but if I were to find out, and I don't have much time to find out, but if I were to find out, I would say that this would go all the way up to probably around this area here because this would be our 50% on the FIBS. So let's play it out.
+
+S
+Speaker
+13:14
+And as you can see, we end up breaking that high right here. So this is where I would get my entry and we would let this trade fly for as long as we possibly can. If you wanted to, like I said before, you can have your nine EMA to help you ride the position to the upside. So take a look here.
+
+
+
+
+S
+Speaker
+13:30
+As you can see, this would tell you to exit right here
