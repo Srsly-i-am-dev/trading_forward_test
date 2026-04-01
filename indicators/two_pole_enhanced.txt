@@ -1,0 +1,263 @@
+// This work is licensed under Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
+// https://creativecommons.org/licenses/by-nc-sa/4.0/
+// (c) BigBeluga
+
+//@version=6
+indicator("Two-Pole Oscillator [Enhanced]", max_labels_count = 500, max_lines_count = 500)
+
+// INPUTS {
+int   length   = input.int(15, minval=1, title="Filter Length")
+bool  disp_lvl = input.bool(true, "Levels")
+
+color up_color = input.color(#55ffda, "", inline = "color")
+color dn_color = input.color(#8c5bff, "", inline = "color")
+
+// ── TRADE SIGNAL INPUTS ──────────────────────────────────────
+enableTradeSignals = input.bool(true, "Enable Trade Signals", group="Trade Signals")
+atrPeriod    = input.int(14, "ATR Period", minval=1, group="Trade Signals")
+tpMultiplier = input.float(2.0, "TP ATR Multiplier", minval=0.1, step=0.1, group="Trade Signals")
+slMultiplier = input.float(1.0, "SL ATR Multiplier", minval=0.1, step=0.1, group="Trade Signals")
+showTPSL     = input.bool(true, "Show TP/SL Lines", group="Trade Signals")
+riskValue    = input.float(1.0, "Risk Multiplier", minval=0.1, step=0.1, group="Trade Signals")
+
+var buy_line = line(na)
+var sell_line = line(na)
+// }
+
+
+// CALCULATIONS {
+float sma1   = ta.sma(close, 25)
+float sma_n1 = ((close - sma1) - ta.sma(close - sma1, 25)) / ta.stdev(close - sma1, 25)
+float area   = ta.sma(high-low, 100)
+
+// Two-pole smooth filter function
+f_two_pole_filter(source, length) =>
+    var float smooth1 = na
+    var float smooth2 = na
+    alpha = 2.0 / (length + 1)
+
+    if na(smooth1)
+        smooth1 := source
+    else
+        smooth1 := (1 - alpha) * smooth1 + alpha * source
+
+    if na(smooth2)
+        smooth2 := smooth1
+    else
+        smooth2 := (1 - alpha) * smooth2 + alpha * smooth1
+
+// Oscillator
+two_p = f_two_pole_filter(sma_n1, length)
+two_pp = two_p[4]
+
+// Colors
+color buy_col1  = color.from_gradient(two_p, -1, 0.5, up_color, na)
+color buy_col2  = color.from_gradient(two_p, -1, 0.5, color.new(up_color, 50), na)
+color sell_col1 = color.from_gradient(two_p, -0.5, 1, na, dn_color)
+color sell_col2 = color.from_gradient(two_p, -0.5, 1, na, color.new(dn_color, 50))
+color color     = two_p > two_pp
+                  ? color.from_gradient(two_p, -1,1, up_color, color.new(up_color, 0))
+                  : color.from_gradient(two_p, -1,1,color.new(dn_color, 0), dn_color)
+
+
+// Signals
+bool buy  = ta.crossover(two_p, two_pp) and two_p < 0 and barstate.isconfirmed
+bool sell = ta.crossunder(two_p, two_pp) and two_p > 0 and barstate.isconfirmed
+
+// ── ATR-BASED TP/SL CALCULATION ──────────────────────────────
+float atrValue = ta.atr(atrPeriod)
+
+float buyTP  = close + atrValue * tpMultiplier
+float buySL  = close - atrValue * slMultiplier
+float sellTP = close - atrValue * tpMultiplier
+float sellSL = close + atrValue * slMultiplier
+
+float buyRR  = (buyTP - close) / (close - buySL)
+float sellRR = (close - sellTP) / (sellSL - close)
+
+// ── HELPER ───────────────────────────────────────────────────
+f_pr(v) => str.tostring(v, format.mintick)
+
+// ── TP/SL LINE TRACKING ──────────────────────────────────────
+var line tp_line  = na
+var line sl_line  = na
+var label tp_lbl  = na
+var label sl_lbl  = na
+
+// }
+
+
+// PLOT {
+if buy
+    sell_line := line(na)
+
+    // ── TP/SL Lines ──────────────────────────────────────────
+    if showTPSL and enableTradeSignals
+        // Clear old lines
+        if not na(tp_line)
+            line.delete(tp_line)
+        if not na(sl_line)
+            line.delete(sl_line)
+        if not na(tp_lbl)
+            label.delete(tp_lbl)
+        if not na(sl_lbl)
+            label.delete(sl_lbl)
+
+        tp_line := line.new(bar_index, buyTP, bar_index + 50, buyTP,
+                     color=color.new(color.lime, 0), width=2, style=line.style_dashed,
+                     force_overlay=true)
+        sl_line := line.new(bar_index, buySL, bar_index + 50, buySL,
+                     color=color.new(color.red, 0), width=2, style=line.style_dashed,
+                     force_overlay=true)
+        tp_lbl := label.new(bar_index + 25, buyTP, "TP: " + f_pr(buyTP),
+                     color=color.new(color.lime, 0), textcolor=color.white,
+                     style=label.style_label_left, size=size.small, force_overlay=true)
+        sl_lbl := label.new(bar_index + 25, buySL, "SL: " + f_pr(buySL),
+                     color=color.new(color.red, 0), textcolor=color.white,
+                     style=label.style_label_left, size=size.small, force_overlay=true)
+
+    // ── ALERT (JSON for webhook) ─────────────────────────────
+    if enableTradeSignals
+        buyRR_str = str.tostring(math.round(buyRR, 2))
+        alertMsg = '{"indicator_id":"twopole_oscillator","strategy_id":"twopole_crossover","symbol":"' + syminfo.ticker + '","action":"BUY","risk":' + str.tostring(riskValue) + ',"meta":{"tp":' + f_pr(buyTP) + ',"sl":' + f_pr(buySL) + ',"rr":"' + buyRR_str + ':1"}}'
+        alert(alertMsg, alert.freq_once_per_bar_close)
+
+    if disp_lvl
+        buy_line := line.new(
+                             bar_index
+                             , low[0] - area
+                             , bar_index
+                             , low[0] - area
+                             , force_overlay = true
+                             , color = buy_col1
+                             , style = line.style_dashed
+                             )
+
+    label.new(bar_index, low[0] - area
+             , color = buy_col1, style = label.style_label_up, force_overlay = true, size = size.tiny)
+
+    label.new(bar_index, low[0] - area*1.5
+             , color = color.new(color.black, 100)
+             , text = str.tostring(low[0] - area)
+             , style = label.style_label_up
+             , force_overlay = true
+             , size = size.small
+             , textcolor = color.new(chart.fg_color, 30))
+
+if ta.crossunder(low, buy_line.get_y1()) and barstate.isconfirmed
+    label.new(
+               bar_index
+             , buy_line.get_y1()
+             , color = color.new(up_color, 100)
+             , style = label.style_label_center
+             , force_overlay = true
+             , size = size.large
+             , text = "\u2716"
+             , textcolor = up_color
+             )
+
+    buy_line := line(na)
+
+if sell
+    buy_line := line(na)
+
+    // ── TP/SL Lines ──────────────────────────────────────────
+    if showTPSL and enableTradeSignals
+        // Clear old lines
+        if not na(tp_line)
+            line.delete(tp_line)
+        if not na(sl_line)
+            line.delete(sl_line)
+        if not na(tp_lbl)
+            label.delete(tp_lbl)
+        if not na(sl_lbl)
+            label.delete(sl_lbl)
+
+        tp_line := line.new(bar_index, sellTP, bar_index + 50, sellTP,
+                     color=color.new(color.red, 0), width=2, style=line.style_dashed,
+                     force_overlay=true)
+        sl_line := line.new(bar_index, sellSL, bar_index + 50, sellSL,
+                     color=color.new(color.lime, 0), width=2, style=line.style_dashed,
+                     force_overlay=true)
+        tp_lbl := label.new(bar_index + 25, sellTP, "TP: " + f_pr(sellTP),
+                     color=color.new(color.red, 0), textcolor=color.white,
+                     style=label.style_label_left, size=size.small, force_overlay=true)
+        sl_lbl := label.new(bar_index + 25, sellSL, "SL: " + f_pr(sellSL),
+                     color=color.new(color.lime, 0), textcolor=color.white,
+                     style=label.style_label_left, size=size.small, force_overlay=true)
+
+    // ── ALERT (JSON for webhook) ─────────────────────────────
+    if enableTradeSignals
+        sellRR_str = str.tostring(math.round(sellRR, 2))
+        alertMsg = '{"indicator_id":"twopole_oscillator","strategy_id":"twopole_crossover","symbol":"' + syminfo.ticker + '","action":"SELL","risk":' + str.tostring(riskValue) + ',"meta":{"tp":' + f_pr(sellTP) + ',"sl":' + f_pr(sellSL) + ',"rr":"' + sellRR_str + ':1"}}'
+        alert(alertMsg, alert.freq_once_per_bar_close)
+
+    if disp_lvl
+        sell_line := line.new(
+                             bar_index
+                             , high[0] + area
+                             , bar_index
+                             , high[0] + area
+                             , force_overlay = true
+                             , color = sell_col1
+                             , style = line.style_dashed
+                             )
+
+    label.new(bar_index, high[0] + area
+             , color = sell_col1, style = label.style_label_down, force_overlay = true, size = size.tiny)
+
+
+    label.new(bar_index, high + area*1.5
+             , color = color.new(color.black, 100)
+             ,  text = str.tostring(high+area)
+             , style = label.style_label_down
+             , force_overlay = true
+             , size = size.small
+             , textcolor = color.new(chart.fg_color, 30))
+
+
+if ta.crossover(high, sell_line.get_y1()) and barstate.isconfirmed
+    label.new(
+               bar_index
+             , sell_line.get_y1()
+             , color = color.new(dn_color, 100)
+             , style = label.style_label_center
+             , force_overlay = true
+             , size = size.large
+             , text = "\u2716"
+             , textcolor = dn_color
+             )
+
+    sell_line := line(na)
+
+switch
+    not na(buy_line)  => buy_line. set_x2(bar_index)
+    not na(sell_line) => sell_line.set_x2(bar_index)
+
+// Extend TP/SL lines
+if not na(tp_line)
+    line.set_x2(tp_line, bar_index)
+if not na(sl_line)
+    line.set_x2(sl_line, bar_index)
+
+plotshape(buy ? two_p[0] : na, "Buy", shape.circle, location.absolute, buy_col2, 0, size = size.small)
+plotshape(buy ? two_p[0] : na, "Buy", shape.circle, location.absolute, buy_col1, 0, size = size.tiny)
+
+plotshape(sell ? two_p[0] : na, "Sell", shape.circle, location.absolute, sell_col2, 0, size = size.small)
+plotshape(sell ? two_p[0] : na, "Sell", shape.circle, location.absolute, sell_col1, 0, size = size.tiny)
+
+p11 = plot(1, color = color.new(chart.fg_color, 80))
+plot(0.5, color = color.new(chart.fg_color, 50))
+p00 = plot(0, color = color.new(bar_index % 2 == 0 ? chart.fg_color : na, 0))
+plot(-0.5, color = color.new(chart.fg_color, 50))
+p_1 = plot(-1, color = color.new(chart.fg_color, 80))
+
+fill(p11, p00, 2, -1, color.new(chart.fg_color, 80), na)
+fill(p_1, p00, 1, -2, na, color.new(chart.fg_color, 80))
+
+
+p1 = plot(two_p, color = color, linewidth = 1)
+p2 = plot(two_pp, display = display.none)
+
+fill(p1, p2, two_p, two_pp, color, na)
+// }
