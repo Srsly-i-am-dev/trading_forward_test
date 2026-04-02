@@ -9,6 +9,9 @@ from config import AppConfig
 
 logger = logging.getLogger("mt5_executor")
 
+# Hard cap on volume to prevent catastrophic sizing errors
+MAX_VOLUME = 10.0
+
 
 class BaseExecutor:
     def execute_trade(self, signal: Dict[str, Any]) -> Dict[str, Any]:
@@ -104,9 +107,18 @@ class MT5Executor(BaseExecutor):
         tick_size = info.trade_tick_size
         tick_value = info.trade_tick_value
         if tick_size <= 0 or tick_value <= 0:
-            logger.warning("Invalid tick info for %s (tick_size=%.8f, tick_value=%.4f), using fallback",
-                           symbol, tick_size, tick_value)
-            return info.volume_min
+            # Retry once — MT5 sometimes needs a moment after symbol_select
+            logger.info("tick_value=0 for %s, retrying after 0.5s...", symbol)
+            time.sleep(0.5)
+            mt5.symbol_select(symbol, True)
+            info = mt5.symbol_info(symbol)
+            if info is not None:
+                tick_size = info.trade_tick_size
+                tick_value = info.trade_tick_value
+            if tick_size <= 0 or tick_value <= 0:
+                logger.warning("Invalid tick info for %s (tick_size=%.8f, tick_value=%.4f), using fallback",
+                               symbol, tick_size, tick_value)
+                return info.volume_min if info else round(max(self.config.default_volume_units / 100_000, 0.01), 2)
 
         # Number of ticks in SL distance
         ticks_in_sl = sl_distance / tick_size
@@ -127,6 +139,11 @@ class MT5Executor(BaseExecutor):
         # Clamp to broker min/max
         volume = max(raw_volume, info.volume_min)
         volume = min(volume, info.volume_max)
+
+        # Hard cap to prevent catastrophic sizing errors
+        if volume > MAX_VOLUME:
+            logger.warning("Volume %.4f exceeds MAX_VOLUME %.1f for %s, capping", volume, MAX_VOLUME, symbol)
+            volume = MAX_VOLUME
 
         # Round to avoid floating point issues
         volume = round(volume, 6)
@@ -230,9 +247,13 @@ class MT5Executor(BaseExecutor):
                 f"Symbol '{symbol}' not found or cannot be selected in MT5."
             )
 
-        # Get current price
+        # Get current price (retry once if tick data is empty — MT5 needs time after symbol_select)
         tick = mt5.symbol_info_tick(symbol)
-        if tick is None:
+        if tick is None or (tick.bid == 0 and tick.ask == 0):
+            logger.info("No tick data for %s, retrying after 0.5s...", symbol)
+            time.sleep(0.5)
+            tick = mt5.symbol_info_tick(symbol)
+        if tick is None or (tick.bid == 0 and tick.ask == 0):
             raise ValueError(f"No tick data for '{symbol}'.")
 
         is_buy = action in ("BUY", "LONG")
@@ -284,7 +305,7 @@ class MT5Executor(BaseExecutor):
                     f"SELL SL {sl:.5f} <= current price {price:.5f}")
 
         # Validate stops against broker minimum distance
-        if tp is not None and sl is not None:
+        if tp is not None or sl is not None:
             tp, sl = self._validate_stops(symbol, price, tp, sl, is_buy)
 
         # Build order request

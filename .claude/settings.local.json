@@ -37,7 +37,17 @@
       "Bash(find . -type f \\\\\\(-name *.mq4 -o -name *.mq5 -o -name *.ex4 -o -name *.ex5 \\\\\\))",
       "Bash(curl -X POST http://localhost:5001/webhook -H \"Content-Type: application/json\" -H \"X-Webhook-Token: pBNYsisvmd7kxs9nNGRk7_Gk--V3Ep23wNbmmx44Oog\" -d \"{\"\"indicator_id\"\":\"\"abc_pattern_mfe\"\",\"\"strategy_id\"\":\"\"abc_mfe_optimized\"\",\"\"symbol\"\":\"\"EURUSD\"\",\"\"action\"\":\"\"BUY\"\",\"\"risk\"\":1.0,\"\"timestamp\"\":\"\"2026-04-02T01:45:00Z\"\",\"\"meta\"\":{\"\"tp\"\":1.16140,\"\"sl\"\":1.15700,\"\"c_level\"\":1.15847,\"\"rr\"\":\"\"1.91:1\"\",\"\"exit_strategy\"\":\"\"fixed_mfe\"\",\"\"tp_mode\"\":\"\"MFE Optimal\"\",\"\"trailing_stop\"\":{\"\"enabled\"\":false}}}\")",
       "Bash(curl -X POST http://localhost:5001/webhook -H \"Content-Type: application/json\" -H \"X-Webhook-Token: pBNYsisvmd7kxs9nNGRk7_Gk--V3Ep23wNbmmx44Oog\" -d \"{\"\"indicator_id\"\":\"\"abc_pattern_mfe\"\",\"\"strategy_id\"\":\"\"abc_mfe_optimized\"\",\"\"symbol\"\":\"\"EURUSD\"\",\"\"action\"\":\"\"BUY\"\",\"\"risk\"\":1.0,\"\"timestamp\"\":\"\"2026-04-02T01:48:00Z\"\",\"\"meta\"\":{\"\"tp\"\":1.16140,\"\"sl\"\":1.15700,\"\"c_level\"\":1.15847,\"\"rr\"\":\"\"1.91:1\"\",\"\"exit_strategy\"\":\"\"fixed_mfe\"\",\"\"tp_mode\"\":\"\"MFE Optimal\"\",\"\"trailing_stop\"\":{\"\"enabled\"\":false}}}\")",
-      "Bash(python -c \":*)"
+      "Bash(python -c \":*)",
+      "Skill(claude-md-management:revise-claude-md)",
+      "Skill(claude-md-management:revise-claude-md:*)",
+      "Bash(tasklist /FI 'IMAGENAME eq python.exe')",
+      "Bash(findstr python:*)",
+      "Bash(tasklist)",
+      "Bash(findstr /i python)",
+      "Bash(python poll_db.py 14 14)",
+      "Bash(curl -s http://localhost:5001/health)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d, indent=2\\)\\)\")",
+      "Bash(powershell -Command \"Get-Process python -ErrorAction SilentlyContinue | Select-Object Id,StartTime | Format-Table -AutoSize\")"
     ]
   }
 }

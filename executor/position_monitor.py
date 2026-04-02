@@ -41,6 +41,7 @@ MAGIC_NUMBER = int(os.getenv("MT5_MAGIC", "234001"))
 CHECK_INTERVAL = 30  # seconds between checks
 DB_PATH = os.path.join(_project_root, os.getenv("DB_PATH", "logs/trades_live.db"))
 REJECTED_DIR = os.path.join(_project_root, "logs", "rejected")
+MAX_RETRY_VOLUME = 5.0  # Hard cap on retry volume to prevent catastrophic orders
 
 # Ensure rejected log directory exists
 os.makedirs(REJECTED_DIR, exist_ok=True)
@@ -92,6 +93,7 @@ EXIT_RULES = {
 }
 
 # Pip sizes for each MT5 symbol
+# FIX: ETHUSD pip = 1.0 (price ~$1800-3500, so 10 pips = $10 movement, not $0.10)
 PIP_SIZES = {
     "EURUSD.sc": 0.0001,
     "EURJPY.sc": 0.01,
@@ -99,41 +101,77 @@ PIP_SIZES = {
     "ADAUSD": 0.0001,
     "USDCHF.sc": 0.0001,
     "GBPUSD.sc": 0.0001,
-    "ETHUSD": 0.01,
+    "ETHUSD": 1.0,
 }
 
 # MT5 error codes that are potentially fixable with a retry
 RETRYABLE_ERRORS = {
-    "MT5_10004",   # Requote — price changed, retry with new price
-    "MT5_10006",   # Reject — transient, retry
-    "MT5_10007",   # Cancel by dealer — transient
-    "MT5_10013",   # Invalid request — sometimes transient
-    "MT5_10014",   # Invalid volume — can fix by adjusting
-    "MT5_10015",   # Invalid price — retry with fresh tick
-    "MT5_10016",   # Invalid stops — retry with adjusted SL/TP
-    "MT5_10017",   # Trade disabled — symbol might become available
-    "MT5_10027",   # AutoTrading disabled — user might enable it
-    "STALE_TP",    # Price moved past TP — might still be valid on retry
+    "MT5_10004",   # Requote
+    "MT5_10006",   # Reject — transient
+    "MT5_10007",   # Cancel by dealer
+    "MT5_10014",   # Invalid volume
+    "MT5_10015",   # Invalid price
+    "MT5_10016",   # Invalid stops
 }
 
 # Track trailing stop levels and partial TP state per position
 _position_state = {}
 
-# Track which rejected signals we've already processed (to avoid re-processing)
-_processed_rejections = set()
+# Track which rejected signals we've already processed
+_processed_rejections = {}  # signal_id -> timestamp (for TTL cleanup)
 
-# ── POSITION MANAGEMENT ─────────────────────────────────────
+# ── HELPERS ──────────────────────────────────────────────────
 
 
 def get_pip_size(symbol: str) -> float:
     return PIP_SIZES.get(symbol, 0.0001)
 
 
+def _safe_tick(symbol: str):
+    """Get tick data with symbol_select + retry. Returns None if unavailable."""
+    mt5.symbol_select(symbol, True)
+    tick = mt5.symbol_info_tick(symbol)
+    if tick is not None and (tick.bid > 0 or tick.ask > 0):
+        return tick
+    # Retry after 0.5s
+    time.sleep(0.5)
+    mt5.symbol_select(symbol, True)
+    tick = mt5.symbol_info_tick(symbol)
+    if tick is not None and (tick.bid > 0 or tick.ask > 0):
+        return tick
+    logger.warning("No valid tick for %s after retry (bid=%.5f, ask=%.5f)",
+                   symbol, tick.bid if tick else 0, tick.ask if tick else 0)
+    return None
+
+
+def _check_mt5_connected():
+    """Check if MT5 is still connected, attempt reconnect if not."""
+    acct = mt5.account_info()
+    if acct is not None:
+        return True
+    logger.warning("MT5 connection lost, attempting reconnect...")
+    mt5.shutdown()
+    if not mt5.initialize():
+        logger.error("MT5 reinitialize failed: %s", mt5.last_error())
+        return False
+    login = int(os.getenv("MT5_LOGIN", "0"))
+    password = os.getenv("MT5_PASSWORD", "")
+    server = os.getenv("MT5_SERVER", "")
+    if not mt5.login(login, password=password, server=server):
+        logger.error("MT5 relogin failed: %s", mt5.last_error())
+        return False
+    logger.info("MT5 reconnected successfully.")
+    return True
+
+
+# ── POSITION MANAGEMENT ─────────────────────────────────────
+
+
 def get_open_positions():
     """Get all open positions for our magic number."""
     positions = mt5.positions_get()
     if positions is None:
-        return []
+        return None  # Return None to distinguish from "no positions" (empty list)
     return [p for p in positions if p.magic == MAGIC_NUMBER]
 
 
@@ -144,14 +182,15 @@ def close_position(position, volume=None, comment="monitor_exit"):
     close_volume = volume if volume else position.volume
 
     # Round volume to broker step
+    mt5.symbol_select(symbol, True)
     info = mt5.symbol_info(symbol)
     if info and info.volume_step > 0:
-        close_volume = max(
-            round(int(close_volume / info.volume_step) * info.volume_step, 6),
-            info.volume_min,
-        )
+        close_volume = round(int(close_volume / info.volume_step) * info.volume_step, 6)
+        close_volume = max(close_volume, info.volume_min)
+        # FIX: Cap at actual position volume to prevent over-closing
+        close_volume = min(close_volume, position.volume)
 
-    tick = mt5.symbol_info_tick(symbol)
+    tick = _safe_tick(symbol)
     if tick is None:
         logger.error("No tick for %s, cannot close position %d", symbol, ticket)
         return False
@@ -223,10 +262,11 @@ def _get_filling_mode(symbol: str) -> int:
 
 
 def check_time_exit(position, rules):
-    """Close position if it's been open longer than max_minutes."""
+    """Close position if it's been open longer than max_minutes.
+    Returns True if position was closed (or attempted)."""
     config = rules.get("time_exit", {})
     if not config.get("enabled"):
-        return
+        return False
 
     max_minutes = config["max_minutes"]
     open_time = datetime.fromtimestamp(position.time, tz=timezone.utc)
@@ -237,6 +277,8 @@ def check_time_exit(position, rules):
         logger.info("TIME EXIT: %s position %d open for %.0f min (max %d min)",
                      position.symbol, position.ticket, elapsed, max_minutes)
         close_position(position, comment=f"time_exit_{max_minutes}min")
+        return True  # Signal that we attempted to close — skip other exit checks
+    return False
 
 
 def check_trailing_stop(position, rules):
@@ -251,13 +293,19 @@ def check_trailing_stop(position, rules):
     activation_dist = config["activation_pips"] * pip
     trail_dist = config["trail_pips"] * pip
 
-    tick = mt5.symbol_info_tick(symbol)
+    # FIX: Use _safe_tick with symbol_select + retry + bid>0 check
+    tick = _safe_tick(symbol)
     if tick is None:
         return
 
     entry = position.price_open
     is_buy = position.type == mt5.ORDER_TYPE_BUY
     current_price = tick.bid if is_buy else tick.ask
+
+    # FIX: Double-check price is valid (not 0)
+    if current_price <= 0:
+        logger.warning("Invalid price %.5f for %s, skipping trail check", current_price, symbol)
+        return
 
     if is_buy:
         profit_dist = current_price - entry
@@ -272,16 +320,20 @@ def check_trailing_stop(position, rules):
 
     state = _position_state[ticket]
 
+    # FIX: Always update best_price to at least current_price on first valid read
+    # This handles monitor restarts where best_price was initialized low
     if is_buy:
         if current_price > state["best_price"]:
             state["best_price"] = current_price
     else:
-        if current_price < state["best_price"]:
+        if current_price < state["best_price"] or state["best_price"] <= 0:
             state["best_price"] = current_price
 
     if not state["trail_active"]:
         if profit_dist >= activation_dist:
             state["trail_active"] = True
+            # FIX: Set best_price to current on activation to ensure accurate tracking
+            state["best_price"] = current_price
             logger.info("TRAIL ACTIVATED: %s position %d at +%.1f pips",
                          symbol, ticket, profit_dist / pip)
         else:
@@ -336,11 +388,14 @@ def check_partial_tp(position, rules):
     close_pct = config["close_pct"]
     tp_pct = config["tp_pct"]
 
-    tick = mt5.symbol_info_tick(symbol)
+    # FIX: Use _safe_tick with symbol_select
+    tick = _safe_tick(symbol)
     if tick is None:
         return
 
     current_price = tick.bid if is_buy else tick.ask
+    if current_price <= 0:
+        return
 
     if is_buy:
         tp_dist = tp - entry
@@ -353,6 +408,20 @@ def check_partial_tp(position, rules):
 
     if reached:
         partial_volume = round(position.volume * close_pct, 2)
+        # FIX: Ensure partial volume doesn't exceed position volume
+        info = mt5.symbol_info(symbol)
+        if info and info.volume_step > 0:
+            partial_volume = round(int(partial_volume / info.volume_step) * info.volume_step, 6)
+            partial_volume = max(partial_volume, info.volume_min)
+            partial_volume = min(partial_volume, position.volume)
+
+        # FIX: If partial_volume equals full volume (position too small to split), skip
+        if partial_volume >= position.volume:
+            logger.info("PARTIAL TP: %s position %d too small to split (vol=%.2f, min=%.2f), skipping",
+                        symbol, ticket, position.volume, info.volume_min if info else 0)
+            state["partial_taken"] = True  # Don't try again
+            return
+
         pip = get_pip_size(symbol)
         logger.info(
             "PARTIAL TP: %s position %d reached %.1f%% of TP (%.5f), "
@@ -360,9 +429,14 @@ def check_partial_tp(position, rules):
             symbol, ticket, tp_pct * 100, partial_level,
             close_pct * 100, partial_volume,
         )
-        if close_position(position, volume=partial_volume,
-                          comment=f"partial_{int(close_pct*100)}pct"):
-            state["partial_taken"] = True
+        # FIX: Mark partial_taken BEFORE close attempt to prevent double-fire
+        state["partial_taken"] = True
+        if not close_position(position, volume=partial_volume,
+                              comment=f"partial_{int(close_pct*100)}pct"):
+            # Close failed — reset flag so we try again next cycle
+            # But log a warning so we know
+            logger.warning("Partial close failed for %d, will retry next cycle", ticket)
+            state["partial_taken"] = False
 
 
 def cleanup_state(open_tickets):
@@ -370,6 +444,14 @@ def cleanup_state(open_tickets):
     closed = [t for t in _position_state if t not in open_tickets]
     for t in closed:
         del _position_state[t]
+
+
+def _cleanup_processed_rejections():
+    """Remove processed rejections older than 24 hours to prevent memory leak."""
+    now = time.time()
+    expired = [sid for sid, ts in _processed_rejections.items() if now - ts > 86400]
+    for sid in expired:
+        del _processed_rejections[sid]
 
 
 # ── REJECTION MONITORING ─────────────────────────────────────
@@ -394,7 +476,6 @@ def scan_rejected_signals():
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
-        # Get rejected/error executions from last 24 hours
         cursor.execute("""
             SELECT e.signal_id, e.status, e.error_code, e.error_message,
                    e.executed_at, e.raw_response,
@@ -440,14 +521,28 @@ def retry_rejected_trade(rejection):
     if not mt5_symbol or not action:
         return False, "Missing symbol or action"
 
-    # Check if symbol is available now
+    # FIX: Check if a position already exists for this symbol+direction (prevent dupes)
+    existing = mt5.positions_get(symbol=mt5_symbol)
+    if existing:
+        for pos in existing:
+            if pos.magic == MAGIC_NUMBER:
+                is_same_dir = (
+                    (action == "BUY" and pos.type == mt5.ORDER_TYPE_BUY) or
+                    (action == "SELL" and pos.type == mt5.ORDER_TYPE_SELL)
+                )
+                if is_same_dir:
+                    return False, f"Position already exists for {mt5_symbol} {action} (ticket={pos.ticket})"
+
+    # Ensure symbol is selected and has data
+    mt5.symbol_select(mt5_symbol, True)
+    time.sleep(0.3)
     info = mt5.symbol_info(mt5_symbol)
     if info is None:
         return False, f"Symbol {mt5_symbol} not found in MT5"
 
     if not info.visible:
-        # Try to make it visible
         mt5.symbol_select(mt5_symbol, True)
+        time.sleep(0.5)
         info = mt5.symbol_info(mt5_symbol)
         if info is None or not info.visible:
             return False, f"Symbol {mt5_symbol} cannot be made visible"
@@ -456,8 +551,8 @@ def retry_rejected_trade(rejection):
         return False, f"Trading disabled for {mt5_symbol}"
 
     # Get fresh tick
-    tick = mt5.symbol_info_tick(mt5_symbol)
-    if tick is None or (tick.bid == 0 and tick.ask == 0):
+    tick = _safe_tick(mt5_symbol)
+    if tick is None:
         return False, f"No tick data for {mt5_symbol}"
 
     price = tick.ask if action == "BUY" else tick.bid
@@ -489,7 +584,8 @@ def retry_rejected_trade(rejection):
                     round(int(volume / info.volume_step) * info.volume_step, 6),
                     info.volume_min,
                 )
-                volume = min(volume, info.volume_max)
+                # FIX: Hard cap on volume to prevent catastrophic orders
+                volume = min(volume, info.volume_max, MAX_RETRY_VOLUME)
             else:
                 return False, "Cannot calculate lot size (loss_per_lot=0)"
         else:
@@ -610,7 +706,7 @@ def process_rejections():
         action = rej.get("action", "?")
         error_msg = rej.get("error_message", "?")
 
-        logger.warning("REJECTED: %s %s %s — %s: %s",
+        logger.warning("REJECTED: %s %s %s -- %s: %s",
                         signal_id[:8], action, symbol, error_code, error_msg)
 
         retry_result = None
@@ -621,17 +717,17 @@ def process_rejections():
             success, detail = retry_rejected_trade(rej)
             retry_result = (success, detail)
             if success:
-                logger.info("RETRY OK: %s — %s", signal_id[:8], detail)
+                logger.info("RETRY OK: %s -- %s", signal_id[:8], detail)
             else:
-                logger.warning("RETRY FAILED: %s — %s", signal_id[:8], detail)
+                logger.warning("RETRY FAILED: %s -- %s", signal_id[:8], detail)
         else:
             logger.info("Not retryable (error=%s), logging to file.", error_code)
 
-        # Write rejection file (always, even if retry succeeded, for record)
+        # Write rejection file
         write_rejection_file(rej, retry_result)
 
-        # Mark as processed
-        _processed_rejections.add(signal_id)
+        # FIX: Store with timestamp for TTL-based cleanup
+        _processed_rejections[signal_id] = time.time()
 
 
 # ── MAIN LOOP ────────────────────────────────────────────────
@@ -663,7 +759,20 @@ def run_monitor():
     try:
         while True:
             cycle_count += 1
+
+            # FIX: Check MT5 connection every cycle
             positions = get_open_positions()
+            if positions is None:
+                # MT5 returned None — connection may be lost
+                logger.warning("positions_get() returned None — checking MT5 connection")
+                if not _check_mt5_connected():
+                    logger.error("MT5 reconnect failed, waiting %ds...", CHECK_INTERVAL)
+                    time.sleep(CHECK_INTERVAL)
+                    continue
+                positions = get_open_positions()
+                if positions is None:
+                    positions = []
+
             open_tickets = set()
 
             # ── EXIT BACKUP STRATEGIES ──
@@ -675,7 +784,9 @@ def run_monitor():
                 if not rules:
                     continue
 
-                check_time_exit(pos, rules)
+                # FIX: If time_exit closes the position, skip other checks for this position
+                if check_time_exit(pos, rules):
+                    continue
                 check_trailing_stop(pos, rules)
                 check_partial_tp(pos, rules)
 
@@ -685,9 +796,12 @@ def run_monitor():
             if positions:
                 for pos in positions:
                     pip = get_pip_size(pos.symbol)
-                    pips_pnl = ((pos.price_current - pos.price_open) / pip
-                                if pos.type == mt5.ORDER_TYPE_BUY
-                                else (pos.price_open - pos.price_current) / pip)
+                    if pip > 0:
+                        pips_pnl = ((pos.price_current - pos.price_open) / pip
+                                    if pos.type == mt5.ORDER_TYPE_BUY
+                                    else (pos.price_open - pos.price_current) / pip)
+                    else:
+                        pips_pnl = 0
                     logger.info(
                         "  [POS] %s %s #%d | entry=%.5f | now=%.5f | pips=%+.1f | $%+.2f | SL=%.5f | TP=%.5f",
                         pos.symbol,
@@ -701,11 +815,15 @@ def run_monitor():
                         pos.tp,
                     )
             else:
-                if cycle_count % 10 == 1:  # Log "no positions" every 5 minutes
+                if cycle_count % 10 == 1:
                     logger.info("  [POS] No open positions (magic=%d)", MAGIC_NUMBER)
 
             # ── REJECTION MONITORING ──
             process_rejections()
+
+            # ── CLEANUP ──
+            if cycle_count % 60 == 0:  # Every 30 minutes
+                _cleanup_processed_rejections()
 
             # ── HEARTBEAT ──
             if cycle_count % 20 == 0:  # Every 10 minutes
@@ -714,7 +832,7 @@ def run_monitor():
                     logger.info("HEARTBEAT: cycle=%d | balance=%.2f | equity=%.2f | positions=%d",
                                  cycle_count, acct.balance, acct.equity, len(positions))
                 else:
-                    logger.warning("HEARTBEAT: MT5 account_info returned None — connection issue?")
+                    logger.warning("HEARTBEAT: MT5 connection lost!")
 
             time.sleep(CHECK_INTERVAL)
 

@@ -2,7 +2,7 @@
 indicator("ABC Pattern - MFE Optimized TP", shorttitle="ABC MFE", overlay=true, max_lines_count=500, max_labels_count=500)
 
 // ── INPUTS ──────────────────────────────────────────────────
-lookback = input.int(10,    "Pivot Lookback",  minval=2, maxval=50)
+lookback = input.int(5,    "Pivot Lookback",  minval=2, maxval=50)
 showBuy  = input.bool(true, "Show Buy Zone")
 showSell = input.bool(true, "Show Sell Zone")
 showTgt  = input.bool(true, "Show Target Line")
