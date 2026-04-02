@@ -27,7 +27,17 @@
       "Bash(curl -s http://localhost:8503/_stcore/health)",
       "Bash(curl -s http://localhost:8503/_stcore/stream)",
       "Bash(netstat -ano)",
-      "Bash(taskkill //F //PID 3304 //PID 28300 //PID 3360)"
+      "Bash(taskkill //F //PID 3304 //PID 28300 //PID 3360)",
+      "Bash(ls \"C:/Users/DEV/OneDrive/Documents/GitHub/trading_forward_test/\"*.txt)",
+      "Bash(ls \"C:/Users/DEV/OneDrive/Documents/GitHub/trading_forward_test/\"*.pine)",
+      "Bash(\"C:/Users/DEV/AppData/Local/Python/bin/python.exe\" mfe_sim.py)",
+      "Bash(\"C:/Users/DEV/AppData/Local/Python/bin/python.exe\" lookback_analysis.py)",
+      "Bash(grep -r \"MT5\\\\|cTrader\\\\|webhook\\\\|account\\\\|login\\\\|credentials\" --include=*.py --include=*.json --include=*.md --include=*.txt .)",
+      "Bash(ls -la ./indicators/*.md)",
+      "Bash(find . -type f \\\\\\(-name *.mq4 -o -name *.mq5 -o -name *.ex4 -o -name *.ex5 \\\\\\))",
+      "Bash(curl -X POST http://localhost:5001/webhook -H \"Content-Type: application/json\" -H \"X-Webhook-Token: pBNYsisvmd7kxs9nNGRk7_Gk--V3Ep23wNbmmx44Oog\" -d \"{\"\"indicator_id\"\":\"\"abc_pattern_mfe\"\",\"\"strategy_id\"\":\"\"abc_mfe_optimized\"\",\"\"symbol\"\":\"\"EURUSD\"\",\"\"action\"\":\"\"BUY\"\",\"\"risk\"\":1.0,\"\"timestamp\"\":\"\"2026-04-02T01:45:00Z\"\",\"\"meta\"\":{\"\"tp\"\":1.16140,\"\"sl\"\":1.15700,\"\"c_level\"\":1.15847,\"\"rr\"\":\"\"1.91:1\"\",\"\"exit_strategy\"\":\"\"fixed_mfe\"\",\"\"tp_mode\"\":\"\"MFE Optimal\"\",\"\"trailing_stop\"\":{\"\"enabled\"\":false}}}\")",
+      "Bash(curl -X POST http://localhost:5001/webhook -H \"Content-Type: application/json\" -H \"X-Webhook-Token: pBNYsisvmd7kxs9nNGRk7_Gk--V3Ep23wNbmmx44Oog\" -d \"{\"\"indicator_id\"\":\"\"abc_pattern_mfe\"\",\"\"strategy_id\"\":\"\"abc_mfe_optimized\"\",\"\"symbol\"\":\"\"EURUSD\"\",\"\"action\"\":\"\"BUY\"\",\"\"risk\"\":1.0,\"\"timestamp\"\":\"\"2026-04-02T01:48:00Z\"\",\"\"meta\"\":{\"\"tp\"\":1.16140,\"\"sl\"\":1.15700,\"\"c_level\"\":1.15847,\"\"rr\"\":\"\"1.91:1\"\",\"\"exit_strategy\"\":\"\"fixed_mfe\"\",\"\"tp_mode\"\":\"\"MFE Optimal\"\",\"\"trailing_stop\"\":{\"\"enabled\"\":false}}}\")",
+      "Bash(python -c \":*)"
     ]
   }
 }
