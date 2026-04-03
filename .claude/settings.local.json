@@ -47,7 +47,22 @@
       "Bash(python poll_db.py 14 14)",
       "Bash(curl -s http://localhost:5001/health)",
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d, indent=2\\)\\)\")",
-      "Bash(powershell -Command \"Get-Process python -ErrorAction SilentlyContinue | Select-Object Id,StartTime | Format-Table -AutoSize\")"
+      "Bash(powershell -Command \"Get-Process python -ErrorAction SilentlyContinue | Select-Object Id,StartTime | Format-Table -AutoSize\")",
+      "Bash(curl -s http://127.0.0.1:4040/api/tunnels)",
+      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); [print\\(t[''''public_url'''']\\) for t in data.get\\(''''tunnels'''',[]\\)]\")",
+      "Bash(python -m streamlit run dashboard/trade_analysis.py)",
+      "Bash(python -X utf8 sim_alert_log.py)",
+      "Bash(python fetch_mt5_data.py)",
+      "Bash(python fetch_mt5_data2.py)",
+      "Bash(python -X utf8 sim_exit_strategies.py)",
+      "Bash(python -X utf8 final_pair_selection.py)",
+      "Bash(python -X utf8 spread_analysis.py)",
+      "Bash(python -X utf8 check_spreads_now.py)",
+      "Bash(python -X utf8 check_live.py)",
+      "Bash(where ngrok.exe)",
+      "Bash(find /c -name ngrok.exe)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }
