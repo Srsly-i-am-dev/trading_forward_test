@@ -57,8 +57,10 @@ def create_app(config: Optional[AppConfig] = None,
     init_db(cfg)
 
     allowed_symbols = _load_allowed_symbols()
+    min_rr_ratio = float(os.getenv("MIN_RR_RATIO", "0.75"))
     if allowed_symbols:
         logger.info("LIVE server — allowed symbols: %s", ", ".join(sorted(allowed_symbols)))
+    logger.info("LIVE server — minimum RR ratio: %.2f:1", min_rr_ratio)
 
     app = Flask(__name__)
     app.config["APP_CONFIG"] = cfg
@@ -122,6 +124,21 @@ def create_app(config: Optional[AppConfig] = None,
                 200, status="rejected", signal_id=signal_id,
                 reason=f"symbol_{sym}_not_allowed_on_live",
             )
+
+        # Minimum RR filter — reject signals with poor risk/reward
+        signal_meta = signal.get("meta") or {}
+        rr_str = str(signal_meta.get("rr", "")).strip()
+        if rr_str and min_rr_ratio > 0:
+            try:
+                rr_value = float(rr_str.split(":")[0])
+                if rr_value < min_rr_ratio:
+                    slogger.info("Rejected: RR %.2f:1 below minimum %.2f:1", rr_value, min_rr_ratio)
+                    return _json_response(
+                        200, status="rejected", signal_id=signal_id,
+                        reason=f"rr_{rr_value:.2f}_below_min_{min_rr_ratio:.2f}",
+                    )
+            except (ValueError, IndexError):
+                slogger.warning("Could not parse RR value: %s", rr_str)
 
         inserted = log_signal(cfg, signal, payload, status="accepted")
         if not inserted:

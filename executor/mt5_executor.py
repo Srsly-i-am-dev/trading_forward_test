@@ -12,6 +12,20 @@ logger = logging.getLogger("mt5_executor")
 # Hard cap on volume to prevent catastrophic sizing errors
 MAX_VOLUME = 10.0
 
+# Per-pair geometric TP multiplier (SL_distance * multiplier = geometric TP distance)
+# Derived from pre-MFE signal analysis of ABC pattern projections
+GEO_MULTIPLIER = {
+    "EURUSD.sc": 3.0,
+    "GBPUSD.sc": 4.5,
+    "USDCHF.sc": 5.0,
+    "GBPAUD.sc": 2.5,
+    "NZDUSD.sc": 4.0,
+    "AUDJPY.sc": 3.0,
+    "EURAUD.sc": 4.0,
+    "USDJPY.sc": 2.5,
+    "EURJPY.sc": 3.0,
+}
+
 
 class BaseExecutor:
     def execute_trade(self, signal: Dict[str, Any]) -> Dict[str, Any]:
@@ -235,6 +249,73 @@ class MT5Executor(BaseExecutor):
                 "raw_response": None,
             }
 
+    def _send_order(self, request: Dict[str, Any], label: str, start: float) -> Dict[str, Any]:
+        """Send a single MT5 order and return a standardised result dict."""
+        result = mt5.order_send(request)
+        elapsed = int((time.perf_counter() - start) * 1000)
+
+        if result is None:
+            error = mt5.last_error()
+            return {
+                "status": "error",
+                "broker_order_id": None,
+                "requested_price": request.get("price"),
+                "filled_price": None,
+                "error_code": f"MT5_{error[0]}",
+                "error_message": error[1] if len(error) > 1 else "order_send returned None",
+                "executed_at": datetime.now(timezone.utc).isoformat(),
+                "latency_ms": elapsed,
+                "raw_response": None,
+                "label": label,
+            }
+
+        if result.retcode == mt5.TRADE_RETCODE_DONE:
+            logger.info(
+                "%s order filled: order=%d, price=%.5f, volume=%.2f",
+                label, result.order, result.price, result.volume,
+            )
+            return {
+                "status": "filled",
+                "broker_order_id": str(result.order),
+                "requested_price": request.get("price"),
+                "filled_price": result.price,
+                "error_code": None,
+                "error_message": None,
+                "executed_at": datetime.now(timezone.utc).isoformat(),
+                "latency_ms": elapsed,
+                "raw_response": {
+                    "retcode": result.retcode,
+                    "deal": result.deal,
+                    "order": result.order,
+                    "volume": result.volume,
+                    "price": result.price,
+                    "bid": result.bid,
+                    "ask": result.ask,
+                    "comment": result.comment,
+                },
+                "label": label,
+            }
+        else:
+            logger.warning(
+                "%s order rejected: retcode=%d, comment=%s",
+                label, result.retcode, result.comment,
+            )
+            return {
+                "status": "rejected",
+                "broker_order_id": str(result.order) if result.order else None,
+                "requested_price": request.get("price"),
+                "filled_price": None,
+                "error_code": f"MT5_{result.retcode}",
+                "error_message": result.comment or f"Retcode {result.retcode}",
+                "executed_at": datetime.now(timezone.utc).isoformat(),
+                "latency_ms": elapsed,
+                "raw_response": {
+                    "retcode": result.retcode,
+                    "comment": result.comment,
+                },
+                "label": label,
+            }
+
     def _execute_trade_inner(
         self, signal: Dict[str, Any], start: float
     ) -> Dict[str, Any]:
@@ -259,142 +340,164 @@ class MT5Executor(BaseExecutor):
         is_buy = action in ("BUY", "LONG")
         price = tick.ask if is_buy else tick.bid
 
-        # TP/SL from meta (absolute prices)
         meta = signal.get("meta") or {}
-        tp = float(meta["tp"]) if meta.get("tp") is not None else None
-        sl = float(meta["sl"]) if meta.get("sl") is not None else None
+        mfe_tp = float(meta["tp"]) if meta.get("tp") is not None else None
+        original_sl = float(meta["sl"]) if meta.get("sl") is not None else None
 
-        # Risk-based volume calculation (uses SL distance)
-        if sl is not None:
-            volume = self._calculate_volume(symbol, sl, price)
+        # ── GLOBAL SL OVERRIDE: 0.1% beyond C level ──
+        c_level = None
+        if meta.get("c_level") is not None:
+            try:
+                c_level = float(meta["c_level"])
+            except (ValueError, TypeError):
+                c_level = None
+
+        if c_level is not None and c_level > 0:
+            if is_buy:
+                sl = round(c_level * 0.999, 6)  # 0.1% below C
+            else:
+                sl = round(c_level * 1.001, 6)  # 0.1% above C
+            logger.info("SL override: C=%.5f -> SL=%.5f (0.1%% beyond C)", c_level, sl)
         else:
-            # Fallback to default volume units if no SL
-            volume = round(max(self.config.default_volume_units / 100_000, 0.01), 2)
+            sl = original_sl
 
-        # Validate TP/SL are on the correct side of current price
-        if tp is not None:
-            if is_buy and tp <= price:
-                logger.warning(
-                    "Stale signal: BUY TP (%.5f) is at or below current price (%.5f) — target already reached",
-                    tp, price,
-                )
-                return self._rejected_result(price, start, "STALE_TP",
-                    f"BUY TP {tp:.5f} <= current price {price:.5f} — target already reached")
-            if not is_buy and tp >= price:
-                logger.warning(
-                    "Stale signal: SELL TP (%.5f) is at or above current price (%.5f) — target already reached",
-                    tp, price,
-                )
-                return self._rejected_result(price, start, "STALE_TP",
-                    f"SELL TP {tp:.5f} >= current price {price:.5f} — target already reached")
+        # ── MINIMUM SL DISTANCE GUARD ──
+        if sl is not None:
+            sl_distance = abs(price - sl)
+            info = mt5.symbol_info(symbol)
+            if info is not None:
+                min_stop_dist = info.trade_stops_level * info.point * 1.2
+                if min_stop_dist > 0 and sl_distance < min_stop_dist:
+                    logger.warning(
+                        "SL too close: distance=%.5f < min=%.5f for %s (C=%.5f, price=%.5f)",
+                        sl_distance, min_stop_dist, symbol,
+                        c_level if c_level else 0, price,
+                    )
+                    return self._rejected_result(price, start, "SL_TOO_CLOSE",
+                        f"SL distance {sl_distance:.5f} < broker min {min_stop_dist:.5f}")
 
+        # ── VALIDATE SL SIDE ──
         if sl is not None:
             if is_buy and sl >= price:
-                logger.warning(
-                    "Invalid signal: BUY SL (%.5f) is at or above current price (%.5f)",
-                    sl, price,
-                )
+                logger.warning("Invalid: BUY SL (%.5f) >= price (%.5f)", sl, price)
                 return self._rejected_result(price, start, "INVALID_SL",
                     f"BUY SL {sl:.5f} >= current price {price:.5f}")
             if not is_buy and sl <= price:
-                logger.warning(
-                    "Invalid signal: SELL SL (%.5f) is at or below current price (%.5f)",
-                    sl, price,
-                )
+                logger.warning("Invalid: SELL SL (%.5f) <= price (%.5f)", sl, price)
                 return self._rejected_result(price, start, "INVALID_SL",
                     f"SELL SL {sl:.5f} <= current price {price:.5f}")
 
-        # Validate stops against broker minimum distance
-        if tp is not None or sl is not None:
-            tp, sl = self._validate_stops(symbol, price, tp, sl, is_buy)
+        # Risk-based volume calculation (uses new SL from C level)
+        if sl is not None:
+            volume = self._calculate_volume(symbol, sl, price)
+        else:
+            volume = round(max(self.config.default_volume_units / 100_000, 0.01), 2)
 
-        # Build order request
-        request: Dict[str, Any] = {
+        # ── COMPUTE GEOMETRIC 50% TP ──
+        geo_mult = GEO_MULTIPLIER.get(symbol, 3.0)
+        sl_dist = abs(price - sl) if sl is not None else 0
+        geo_tp_dist = sl_dist * geo_mult * 0.50  # 50% of full geometric projection
+
+        if is_buy:
+            geo_tp = round(price + geo_tp_dist, 6) if geo_tp_dist > 0 else None
+        else:
+            geo_tp = round(price - geo_tp_dist, 6) if geo_tp_dist > 0 else None
+
+        # ── VALIDATE TPs ──
+        if mfe_tp is not None:
+            if is_buy and mfe_tp <= price:
+                logger.warning("Stale: BUY MFE TP (%.5f) <= price (%.5f)", mfe_tp, price)
+                mfe_tp = None
+            if not is_buy and mfe_tp is not None and mfe_tp >= price:
+                logger.warning("Stale: SELL MFE TP (%.5f) >= price (%.5f)", mfe_tp, price)
+                mfe_tp = None
+
+        if geo_tp is not None:
+            if is_buy and geo_tp <= price:
+                geo_tp = None
+            if not is_buy and geo_tp is not None and geo_tp >= price:
+                geo_tp = None
+
+        # Validate stops against broker minimum distance
+        if geo_tp is not None or sl is not None:
+            geo_tp, sl = self._validate_stops(symbol, price, geo_tp, sl, is_buy)
+        mfe_tp_validated = mfe_tp
+        if mfe_tp_validated is not None:
+            mfe_tp_validated, _ = self._validate_stops(symbol, price, mfe_tp_validated, sl, is_buy)
+
+        # ── SEND DUAL ORDERS ──
+        signal_id_short = signal.get("signal_id", "")[:8]
+        order_type = mt5.ORDER_TYPE_BUY if is_buy else mt5.ORDER_TYPE_SELL
+        filling_mode = self._get_filling_mode(symbol)
+
+        base_request = {
             "action": mt5.TRADE_ACTION_DEAL,
             "symbol": symbol,
             "volume": volume,
-            "type": mt5.ORDER_TYPE_BUY if is_buy else mt5.ORDER_TYPE_SELL,
+            "type": order_type,
             "price": price,
             "deviation": self.config.mt5_deviation,
             "magic": self.config.mt5_magic,
-            "comment": f"TV_{signal.get('signal_id', '')[:8]}",
             "type_time": mt5.ORDER_TIME_GTC,
-            "type_filling": self._get_filling_mode(symbol),
+            "type_filling": filling_mode,
         }
 
-        if tp is not None:
-            request["tp"] = tp
-        if sl is not None:
-            request["sl"] = sl
+        results = []
 
-        logger.info(
-            "Placing %s order: symbol=%s, volume=%.2f lots, price=%.5f, tp=%s, sl=%s, risk=$%.0f",
-            action, symbol, volume, price, tp, sl, self.config.risk_per_trade,
-        )
-
-        # Send order
-        result = mt5.order_send(request)
-        elapsed = int((time.perf_counter() - start) * 1000)
-
-        if result is None:
-            error = mt5.last_error()
-            return {
-                "status": "error",
-                "broker_order_id": None,
-                "requested_price": price,
-                "filled_price": None,
-                "error_code": f"MT5_{error[0]}",
-                "error_message": error[1] if len(error) > 1 else "order_send returned None",
-                "executed_at": datetime.now(timezone.utc).isoformat(),
-                "latency_ms": elapsed,
-                "raw_response": None,
-            }
-
-        # Parse result
-        if result.retcode == mt5.TRADE_RETCODE_DONE:
+        # Order A: GEO position (50% geometric TP + trailing stop managed by position monitor)
+        if geo_tp is not None:
+            req_geo = dict(base_request)
+            req_geo["comment"] = f"TV_{signal_id_short}_GEO"
+            req_geo["tp"] = geo_tp
+            if sl is not None:
+                req_geo["sl"] = sl
             logger.info(
-                "Order filled: order=%d, price=%.5f, volume=%.2f",
-                result.order, result.price, result.volume,
+                "Placing GEO %s: %s vol=%.2f price=%.5f tp=%.5f sl=%s",
+                action, symbol, volume, price, geo_tp, sl,
             )
-            return {
-                "status": "filled",
-                "broker_order_id": str(result.order),
-                "requested_price": price,
-                "filled_price": result.price,
-                "error_code": None,
-                "error_message": None,
-                "executed_at": datetime.now(timezone.utc).isoformat(),
-                "latency_ms": elapsed,
-                "raw_response": {
-                    "retcode": result.retcode,
-                    "deal": result.deal,
-                    "order": result.order,
-                    "volume": result.volume,
-                    "price": result.price,
-                    "bid": result.bid,
-                    "ask": result.ask,
-                    "comment": result.comment,
-                },
-            }
-        else:
-            logger.warning(
-                "Order rejected: retcode=%d, comment=%s",
-                result.retcode, result.comment,
+            results.append(self._send_order(req_geo, "GEO", start))
+
+        # Order B: MFE position (MFE TP from indicator, managed by time_exit / partial_tp)
+        if mfe_tp_validated is not None:
+            req_mfe = dict(base_request)
+            req_mfe["comment"] = f"TV_{signal_id_short}_MFE"
+            req_mfe["tp"] = mfe_tp_validated
+            if sl is not None:
+                req_mfe["sl"] = sl
+            logger.info(
+                "Placing MFE %s: %s vol=%.2f price=%.5f tp=%.5f sl=%s",
+                action, symbol, volume, price, mfe_tp_validated, sl,
             )
-            return {
-                "status": "rejected",
-                "broker_order_id": str(result.order) if result.order else None,
-                "requested_price": price,
-                "filled_price": None,
-                "error_code": f"MT5_{result.retcode}",
-                "error_message": result.comment or f"Retcode {result.retcode}",
-                "executed_at": datetime.now(timezone.utc).isoformat(),
-                "latency_ms": elapsed,
-                "raw_response": {
-                    "retcode": result.retcode,
-                    "comment": result.comment,
-                },
-            }
+            results.append(self._send_order(req_mfe, "MFE", start))
+
+        # If neither TP was valid, send a single order with just SL
+        if not results:
+            req_fallback = dict(base_request)
+            req_fallback["comment"] = f"TV_{signal_id_short}"
+            if sl is not None:
+                req_fallback["sl"] = sl
+            logger.info(
+                "Placing fallback %s (no valid TP): %s vol=%.2f price=%.5f sl=%s",
+                action, symbol, volume, price, sl,
+            )
+            results.append(self._send_order(req_fallback, "SINGLE", start))
+
+        # ── COMBINED RESULT ──
+        # Return the first filled result as the primary; attach all sub-results
+        filled = [r for r in results if r["status"] == "filled"]
+        primary = filled[0] if filled else results[0]
+
+        # Merge all order IDs into a combined response
+        all_orders = [r.get("broker_order_id") for r in results if r.get("broker_order_id")]
+        primary["raw_response"] = primary.get("raw_response") or {}
+        primary["raw_response"]["dual_orders"] = [
+            {"label": r.get("label"), "order_id": r.get("broker_order_id"), "status": r["status"]}
+            for r in results
+        ]
+        if len(all_orders) > 1:
+            primary["broker_order_id"] = ",".join(str(o) for o in all_orders)
+
+        return primary
 
     def close(self):
         """Shutdown MT5 connection."""

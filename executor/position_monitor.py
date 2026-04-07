@@ -46,62 +46,75 @@ MAX_RETRY_VOLUME = 5.0  # Hard cap on retry volume to prevent catastrophic order
 # Ensure rejected log directory exists
 os.makedirs(REJECTED_DIR, exist_ok=True)
 
-# Exit strategies per symbol (MT5 symbol names)
-EXIT_RULES = {
+# Exit strategies for MFE positions (comment contains _MFE)
+# Time exits extended to 360min minimum — 30min/120min caused excessive early exits
+MFE_EXIT_RULES = {
     "EURUSD.sc": {
         "partial_tp": {
             "enabled": True,
             "close_pct": 0.5,       # close 50% of position
             "tp_pct": 0.75,         # when price reaches 75% of TP distance
         },
+        "time_exit": {
+            "enabled": True,
+            "max_minutes": 480,
+        },
     },
     "EURJPY.sc": {
-        # 1:1 RR handled by TP/SL, no extra exit needed
+        "time_exit": {"enabled": True, "max_minutes": 480},
     },
     "GBPAUD.sc": {
-        "time_exit": {
-            "enabled": True,
-            "max_minutes": 120,
-        },
-    },
-    "ADAUSD": {
-        "trailing_stop": {
-            "enabled": True,
-            "activation_pips": 10,
-            "trail_pips": 10,
-        },
+        "time_exit": {"enabled": True, "max_minutes": 360},
     },
     "USDCHF.sc": {
-        "time_exit": {
-            "enabled": True,
-            "max_minutes": 120,
-        },
+        "time_exit": {"enabled": True, "max_minutes": 360},
     },
     "GBPUSD.sc": {
-        "time_exit": {
-            "enabled": True,
-            "max_minutes": 30,
-        },
+        "time_exit": {"enabled": True, "max_minutes": 360},
     },
-    "ETHUSD": {
-        "trailing_stop": {
-            "enabled": True,
-            "activation_pips": 10,
-            "trail_pips": 10,
-        },
+    "AUDJPY.sc": {
+        "time_exit": {"enabled": True, "max_minutes": 360},
+    },
+    "EURAUD.sc": {
+        "time_exit": {"enabled": True, "max_minutes": 360},
+    },
+    "NZDUSD.sc": {
+        "time_exit": {"enabled": True, "max_minutes": 360},
+    },
+    "USDJPY.sc": {
+        "time_exit": {"enabled": True, "max_minutes": 360},
     },
 }
 
+# Exit strategies for GEO positions (comment contains _GEO)
+# Trailing stop activates at 50% of TP distance, trails at 25% of TP distance
+# TP distance is computed dynamically from the position's TP and entry price
+GEO_EXIT_RULES = {
+    "trailing_stop": {
+        "enabled": True,
+        "activation_pct_of_tp": 0.50,  # activate when 50% of TP distance reached
+        "trail_pct_of_tp": 0.25,       # trail at 25% of TP distance behind best price
+    },
+    "time_exit": {
+        "enabled": True,
+        "max_minutes": 720,  # 12 hours — GEO positions get more time
+    },
+}
+
+# Legacy compat: EXIT_RULES still used for positions without _GEO/_MFE comment
+EXIT_RULES = MFE_EXIT_RULES
+
 # Pip sizes for each MT5 symbol
-# FIX: ETHUSD pip = 1.0 (price ~$1800-3500, so 10 pips = $10 movement, not $0.10)
 PIP_SIZES = {
     "EURUSD.sc": 0.0001,
     "EURJPY.sc": 0.01,
     "GBPAUD.sc": 0.0001,
-    "ADAUSD": 0.0001,
     "USDCHF.sc": 0.0001,
     "GBPUSD.sc": 0.0001,
-    "ETHUSD": 1.0,
+    "AUDJPY.sc": 0.01,
+    "EURAUD.sc": 0.0001,
+    "NZDUSD.sc": 0.0001,
+    "USDJPY.sc": 0.01,
 }
 
 # MT5 error codes that are potentially fixable with a retry
@@ -361,6 +374,92 @@ def check_trailing_stop(position, rules):
     if modify_sl(position, new_sl):
         logger.info("TRAIL SL: %s position %d SL moved to %.5f (best=%.5f)",
                      symbol, ticket, new_sl, state["best_price"])
+
+
+def check_geo_trailing_stop(position):
+    """Trailing stop for GEO positions — activation & trail distances are % of TP distance."""
+    config = GEO_EXIT_RULES.get("trailing_stop", {})
+    if not config.get("enabled"):
+        return
+
+    ticket = position.ticket
+    symbol = position.symbol
+    entry = position.price_open
+    tp = position.tp
+    is_buy = position.type == mt5.ORDER_TYPE_BUY
+
+    # Need a valid TP to compute distances
+    if tp <= 0:
+        return
+
+    tp_dist = abs(tp - entry)
+    if tp_dist <= 0:
+        return
+
+    activation_dist = tp_dist * config["activation_pct_of_tp"]
+    trail_dist = tp_dist * config["trail_pct_of_tp"]
+
+    tick = _safe_tick(symbol)
+    if tick is None:
+        return
+
+    current_price = tick.bid if is_buy else tick.ask
+    if current_price <= 0:
+        return
+
+    if is_buy:
+        profit_dist = current_price - entry
+    else:
+        profit_dist = entry - current_price
+
+    if ticket not in _position_state:
+        _position_state[ticket] = {
+            "trail_active": False,
+            "best_price": current_price,
+        }
+
+    state = _position_state[ticket]
+
+    # Update best price
+    if is_buy:
+        if current_price > state["best_price"]:
+            state["best_price"] = current_price
+    else:
+        if current_price < state["best_price"] or state["best_price"] <= 0:
+            state["best_price"] = current_price
+
+    if not state["trail_active"]:
+        if profit_dist >= activation_dist:
+            state["trail_active"] = True
+            state["best_price"] = current_price
+            pip = get_pip_size(symbol)
+            logger.info("GEO TRAIL ACTIVATED: %s #%d at +%.1f pips (%.0f%% of TP)",
+                         symbol, ticket,
+                         profit_dist / pip if pip > 0 else 0,
+                         profit_dist / tp_dist * 100)
+        else:
+            return
+
+    if is_buy:
+        new_sl = round(state["best_price"] - trail_dist, 6)
+        if position.sl > 0 and new_sl <= position.sl:
+            return
+        if current_price <= new_sl:
+            logger.info("GEO TRAIL HIT: %s #%d, closing at %.5f", symbol, ticket, current_price)
+            close_position(position, comment="geo_trailing_stop")
+            return
+    else:
+        new_sl = round(state["best_price"] + trail_dist, 6)
+        if position.sl > 0 and new_sl >= position.sl:
+            return
+        if current_price >= new_sl:
+            logger.info("GEO TRAIL HIT: %s #%d, closing at %.5f", symbol, ticket, current_price)
+            close_position(position, comment="geo_trailing_stop")
+            return
+
+    if modify_sl(position, new_sl):
+        logger.info("GEO TRAIL SL: %s #%d SL -> %.5f (best=%.5f, trail=%.5f)",
+                     symbol, ticket, new_sl, state["best_price"], trail_dist)
 
 
 def check_partial_tp(position, rules):
@@ -779,16 +878,32 @@ def run_monitor():
             for pos in positions:
                 symbol = pos.symbol
                 open_tickets.add(pos.ticket)
+                comment = pos.comment or ""
 
-                rules = EXIT_RULES.get(symbol, {})
-                if not rules:
-                    continue
-
-                # FIX: If time_exit closes the position, skip other checks for this position
-                if check_time_exit(pos, rules):
-                    continue
-                check_trailing_stop(pos, rules)
-                check_partial_tp(pos, rules)
+                # Route by position type (GEO / MFE / legacy)
+                if "_GEO" in comment:
+                    # GEO positions: trailing stop + long time exit
+                    geo_time_rules = GEO_EXIT_RULES
+                    if check_time_exit(pos, geo_time_rules):
+                        continue
+                    check_geo_trailing_stop(pos)
+                elif "_MFE" in comment:
+                    # MFE positions: standard exit rules by symbol
+                    rules = MFE_EXIT_RULES.get(symbol, {})
+                    if not rules:
+                        continue
+                    if check_time_exit(pos, rules):
+                        continue
+                    check_partial_tp(pos, rules)
+                else:
+                    # Legacy positions (no _GEO/_MFE suffix): use symbol-based rules
+                    rules = EXIT_RULES.get(symbol, {})
+                    if not rules:
+                        continue
+                    if check_time_exit(pos, rules):
+                        continue
+                    check_trailing_stop(pos, rules)
+                    check_partial_tp(pos, rules)
 
             cleanup_state(open_tickets)
 
