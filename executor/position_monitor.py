@@ -164,7 +164,11 @@ def _check_mt5_connected():
         return True
     logger.warning("MT5 connection lost, attempting reconnect...")
     mt5.shutdown()
-    if not mt5.initialize():
+    init_kwargs = {}
+    terminal_path = os.getenv("MT5_TERMINAL_PATH", "")
+    if terminal_path:
+        init_kwargs["path"] = terminal_path
+    if not mt5.initialize(**init_kwargs):
         logger.error("MT5 reinitialize failed: %s", mt5.last_error())
         return False
     login = int(os.getenv("MT5_LOGIN", "0"))
@@ -834,7 +838,11 @@ def process_rejections():
 
 def run_monitor():
     """Main monitoring loop."""
-    if not mt5.initialize():
+    init_kwargs = {}
+    terminal_path = os.getenv("MT5_TERMINAL_PATH", "")
+    if terminal_path:
+        init_kwargs["path"] = terminal_path
+    if not mt5.initialize(**init_kwargs):
         logger.error("MT5 initialize failed: %s", mt5.last_error())
         sys.exit(1)
 
