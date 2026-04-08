@@ -123,7 +123,8 @@ if (Test-Path $envFile) {
 Write-Host ""
 Write-Host "6. Testing MT5 connection..." -ForegroundColor White
 
-$mt5Script = @"
+$mt5ScriptFile = Join-Path $RepoRoot "vps_deploy\_mt5_setup_check.py"
+@"
 import os, sys
 os.chdir(r'$RepoRoot')
 from dotenv import load_dotenv
@@ -140,9 +141,10 @@ else:
     else:
         print('FAIL|Could not get account info')
     mt5.shutdown()
-"@
+"@ | Set-Content -Path $mt5ScriptFile -Encoding UTF8
 
-$mt5Result = & python -X utf8 -c $mt5Script 2>&1
+$mt5Result = & python -X utf8 $mt5ScriptFile 2>&1
+Remove-Item $mt5ScriptFile -Force -ErrorAction SilentlyContinue
 $mt5Line = ($mt5Result -split "`n" | Where-Object { $_.Trim() } | Select-Object -Last 1).Trim()
 
 if ($mt5Line -match "^OK\|(.+)\|(.+)\|(.+)$") {

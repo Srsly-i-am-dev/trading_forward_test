@@ -94,7 +94,8 @@ if ($envExists) {
 Write-Host ""
 Write-Host "4. MetaTrader 5" -ForegroundColor White
 
-$mt5Script = @"
+$mt5ScriptFile = Join-Path $RepoRoot "vps_deploy\_mt5_check.py"
+@"
 import sys, os
 os.chdir(r'$RepoRoot')
 from dotenv import load_dotenv
@@ -128,13 +129,15 @@ for s in symbols:
     if not vis or bid <= 0:
         bad.append(s)
 if bad:
-    print(f'SYMBOLS_BAD|{",".join(bad)}')
+    sep = ','
+    print(f'SYMBOLS_BAD|{sep.join(bad)}')
 else:
     print(f'SYMBOLS_OK|{len(symbols)}')
 mt5.shutdown()
-"@
+"@ | Set-Content -Path $mt5ScriptFile -Encoding UTF8
 
-$mt5Result = & python -X utf8 -c $mt5Script 2>&1
+$mt5Result = & python -X utf8 $mt5ScriptFile 2>&1
+Remove-Item $mt5ScriptFile -Force -ErrorAction SilentlyContinue
 $mt5Lines = ($mt5Result -split "`n") | Where-Object { $_.Trim() }
 
 $mt5InitOk = $false
