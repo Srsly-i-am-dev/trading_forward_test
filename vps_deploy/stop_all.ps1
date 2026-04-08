@@ -29,24 +29,24 @@ foreach ($c in $components) {
         continue
     }
 
-    $pid = (Get-Content $c.PidFile -ErrorAction SilentlyContinue | Select-Object -First 1).Trim()
+    $procId = (Get-Content $c.PidFile -ErrorAction SilentlyContinue | Select-Object -First 1).Trim()
 
-    if (-not $pid) {
+    if (-not $procId) {
         Write-Host " empty PID file" -ForegroundColor Yellow
         Remove-Item $c.PidFile -Force -ErrorAction SilentlyContinue
         continue
     }
 
-    $proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
+    $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
     if ($proc) {
         try {
-            Stop-Process -Id $pid -Force
-            Write-Host " stopped (PID=$pid)" -ForegroundColor Green
+            Stop-Process -Id $procId -Force
+            Write-Host " stopped (PID=$procId)" -ForegroundColor Green
         } catch {
-            Write-Host " failed to stop (PID=$pid): $_" -ForegroundColor Red
+            Write-Host " failed to stop (PID=$procId): $_" -ForegroundColor Red
         }
     } else {
-        Write-Host " already stopped (stale PID=$pid)" -ForegroundColor Gray
+        Write-Host " already stopped (stale PID=$procId)" -ForegroundColor Gray
     }
 
     Remove-Item $c.PidFile -Force -ErrorAction SilentlyContinue
