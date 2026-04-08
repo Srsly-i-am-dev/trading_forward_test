@@ -69,6 +69,7 @@ $envExists = Test-Path $envFile
 Write-Check $envExists ".env.live exists at $envFile" "Create .env.live from .env.example"
 
 $token = ""
+$serverPort = 80  # default
 if ($envExists) {
     $envContent = Get-Content $envFile -Raw
     $criticalKeys = @("WEBHOOK_SHARED_TOKEN", "MT5_LOGIN", "MT5_PASSWORD", "MT5_SERVER", "SERVER_PORT")
@@ -78,11 +79,11 @@ if ($envExists) {
         Write-Check $hasValue "$key is set" "$key is missing or empty in .env.live"
     }
 
-    # Check SERVER_PORT is 5001
+    # Read SERVER_PORT
     $portMatch = [regex]::Match($envContent, "(?m)^SERVER_PORT=(\d+)")
     if ($portMatch.Success) {
-        $port = $portMatch.Groups[1].Value
-        Write-Check ($port -eq "5001") "SERVER_PORT = $port" "Expected 5001 for live server, got $port"
+        $serverPort = [int]$portMatch.Groups[1].Value
+        Write-Check $true "SERVER_PORT = $serverPort"
     }
 
     # Extract token for later use
@@ -177,32 +178,32 @@ if (-not $mt5InitOk -and -not ($mt5Lines -match "INIT_FAIL")) {
 
 # ─── 5. Flask server status ──────────────────────────────────────────
 Write-Host ""
-Write-Host "5. Webhook Server (Flask)" -ForegroundColor White
+Write-Host "5. Webhook Server (Flask on port $serverPort)" -ForegroundColor White
 
 $portInUse = $false
 try {
     $tcp = New-Object System.Net.Sockets.TcpClient
-    $tcp.Connect("127.0.0.1", 5001)
+    $tcp.Connect("127.0.0.1", $serverPort)
     $portInUse = $true
     $tcp.Close()
 } catch {
     $portInUse = $false
 }
 
-Write-Check $portInUse "Port 5001 is listening" "Webhook server is NOT running. Start with: python -X utf8 -m server.webhook_server_live"
+Write-Check $portInUse "Port $serverPort is listening" "Webhook server is NOT running. Start with: python -X utf8 -m server.webhook_server_live"
 
 if ($portInUse) {
     try {
-        $health = Invoke-RestMethod -Uri "http://localhost:5001/health" -Method Get -TimeoutSec 5
+        $health = Invoke-RestMethod -Uri "http://localhost:$serverPort/health" -Method Get -TimeoutSec 5
         $isLive = $health.mode -eq "LIVE" -and $health.status -eq "ok"
         Write-Check $isLive "Health endpoint: mode=$($health.mode), status=$($health.status), account=$($health.account)" "Server responded but mode is not LIVE"
     } catch {
-        Write-Check $false "Health endpoint unreachable" "Server is on port 5001 but /health failed: $_"
+        Write-Check $false "Health endpoint unreachable" "Server is on port $serverPort but /health failed: $_"
     }
 
     # Test the actual webhook route with a GET (should return 405 Method Not Allowed, NOT 404)
     try {
-        $webhookTest = Invoke-WebRequest -Uri "http://localhost:5001/webhook" -Method Get -TimeoutSec 5 -ErrorAction SilentlyContinue
+        $webhookTest = Invoke-WebRequest -Uri "http://localhost:$serverPort/webhook" -Method Get -TimeoutSec 5 -ErrorAction SilentlyContinue
     } catch {
         $statusCode = $_.Exception.Response.StatusCode.value__
         if ($statusCode -eq 405) {
@@ -242,37 +243,46 @@ Write-Check $monRunning "Position monitor is running" "Start with: python -X utf
 Write-Host ""
 Write-Host "7. Firewall & External Access" -ForegroundColor White
 
-# Check Windows Firewall rule for port 5001
+# Check Windows Firewall rule for the configured port
 $fwRule = Get-NetFirewallRule -ErrorAction SilentlyContinue |
     Where-Object { $_.Enabled -eq 'True' -and $_.Direction -eq 'Inbound' -and $_.Action -eq 'Allow' } |
     ForEach-Object {
         $portFilter = $_ | Get-NetFirewallPortFilter -ErrorAction SilentlyContinue
-        if ($portFilter.LocalPort -match '5001' -or $portFilter.LocalPort -eq 'Any') { $_ }
+        if ($portFilter.LocalPort -match "$serverPort" -or $portFilter.LocalPort -eq 'Any') { $_ }
     } | Select-Object -First 1
 
 if ($fwRule) {
-    Write-Check $true "Firewall allows inbound on port 5001 (rule: $($fwRule.DisplayName))"
+    Write-Check $true "Firewall allows inbound on port $serverPort (rule: $($fwRule.DisplayName))"
 } else {
-    Write-Check $false "No firewall rule allowing inbound port 5001" "Run (admin): New-NetFirewallRule -DisplayName 'Webhook Server' -Direction Inbound -Port 5001 -Protocol TCP -Action Allow"
+    Write-Check $false "No firewall rule allowing inbound port $serverPort" "Run (admin): New-NetFirewallRule -DisplayName 'Webhook Server' -Direction Inbound -Port $serverPort -Protocol TCP -Action Allow"
 }
 
-# Get public IP
+# Get public IP and build webhook URL
 try {
     $publicIp = (Invoke-RestMethod -Uri "https://api.ipify.org" -TimeoutSec 5).Trim()
     Write-Host "  Public IP: $publicIp" -ForegroundColor Cyan
 
+    # Build URL — omit port for 80 (HTTP default)
+    if ($serverPort -eq 80) {
+        $webhookUrl = "http://$publicIp/webhook?token=$token"
+        $healthUrl  = "http://$publicIp/health"
+    } else {
+        $webhookUrl = "http://$publicIp`:$serverPort/webhook?token=$token"
+        $healthUrl  = "http://$publicIp`:$serverPort/health"
+    }
+
     Write-Host ""
     Write-Host "  TradingView Webhook URL:" -ForegroundColor Cyan
-    Write-Host "  http://$publicIp`:5001/webhook?token=$token" -ForegroundColor Green
+    Write-Host "  $webhookUrl" -ForegroundColor Green
     Write-Host ""
 
     # Test external reachability
     if ($portInUse) {
         try {
-            $extHealth = Invoke-RestMethod -Uri "http://$publicIp`:5001/health" -Method Get -TimeoutSec 10
-            Write-Check ($extHealth.status -eq "ok") "External access: http://$publicIp`:5001/health returns OK"
+            $extHealth = Invoke-RestMethod -Uri $healthUrl -Method Get -TimeoutSec 10
+            Write-Check ($extHealth.status -eq "ok") "External access: $healthUrl returns OK"
         } catch {
-            Write-Check $false "External access to http://$publicIp`:5001/health" "Port 5001 not reachable from outside. Check: firewall, VPS provider security group, or ISP blocking."
+            Write-Check $false "External access to $healthUrl" "Port $serverPort not reachable from outside. Check: firewall, VPS provider security group, or ISP blocking."
         }
     }
 } catch {

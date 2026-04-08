@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Launches both components as background processes with PID tracking.
-    Prints the TradingView webhook URL at the end.
+    Reads SERVER_PORT from .env.live. Prints the TradingView webhook URL at the end.
 
 .EXAMPLE
     .\vps_deploy\start_all.ps1
@@ -19,6 +19,18 @@ $ErrorActionPreference = "Stop"
 $pidWebhook  = Join-Path $RepoRoot ".webhook-server.pid"
 $pidMonitor  = Join-Path $RepoRoot ".position-monitor.pid"
 $logsDir     = Join-Path $RepoRoot "logs"
+$envFile     = Join-Path $RepoRoot ".env.live"
+
+# Read SERVER_PORT from .env.live
+$serverPort = 80  # default
+$token = ""
+if (Test-Path $envFile) {
+    $envContent = Get-Content $envFile -Raw
+    $portMatch = [regex]::Match($envContent, "(?m)^SERVER_PORT=(\d+)")
+    if ($portMatch.Success) { $serverPort = [int]$portMatch.Groups[1].Value }
+    $tokenMatch = [regex]::Match($envContent, "(?m)^WEBHOOK_SHARED_TOKEN=(.+)$")
+    if ($tokenMatch.Success) { $token = $tokenMatch.Groups[1].Value.Trim() }
+}
 
 # Ensure logs directory exists
 if (-not (Test-Path $logsDir)) { New-Item -ItemType Directory -Path $logsDir -Force | Out-Null }
@@ -66,33 +78,33 @@ Write-Host "Repo: $RepoRoot"
 Write-Host ""
 
 # ─── 1. Webhook Server ───────────────────────────────────────────────
-Write-Host "1. Webhook Server (port 5001)" -ForegroundColor White
+Write-Host "1. Webhook Server (port $serverPort)" -ForegroundColor White
 $webhookLog = Join-Path $logsDir "webhook_server.log"
 $webhookProc = Start-BackgroundPython "Webhook Server" $pidWebhook $webhookLog @("-m", "server.webhook_server_live")
 
 if ($webhookProc) {
-    Write-Host "  Waiting for server to bind port 5001..." -ForegroundColor Gray
+    Write-Host "  Waiting for server to bind port $serverPort..." -ForegroundColor Gray
     $ready = $false
     for ($i = 0; $i -lt 10; $i++) {
         Start-Sleep -Seconds 1
         try {
             $tcp = New-Object System.Net.Sockets.TcpClient
-            $tcp.Connect("127.0.0.1", 5001)
+            $tcp.Connect("127.0.0.1", $serverPort)
             $tcp.Close()
             $ready = $true
             break
         } catch { }
     }
     if ($ready) {
-        Write-Host "  Port 5001 is listening" -ForegroundColor Green
+        Write-Host "  Port $serverPort is listening" -ForegroundColor Green
         try {
-            $health = Invoke-RestMethod -Uri "http://localhost:5001/health" -Method Get -TimeoutSec 5
+            $health = Invoke-RestMethod -Uri "http://localhost:$serverPort/health" -Method Get -TimeoutSec 5
             Write-Host "  Health: mode=$($health.mode), account=$($health.account)" -ForegroundColor Green
         } catch {
             Write-Host "  [WARN] Port is open but /health didn't respond yet" -ForegroundColor Yellow
         }
     } else {
-        Write-Host "  [WARN] Server started but port 5001 not yet listening after 10s" -ForegroundColor Yellow
+        Write-Host "  [WARN] Server started but port $serverPort not yet listening after 10s" -ForegroundColor Yellow
         Write-Host "  Check: $webhookLog.err" -ForegroundColor Yellow
     }
 }
@@ -105,23 +117,20 @@ Start-BackgroundPython "Position Monitor" $pidMonitor $monitorLog @("executor/po
 
 # ─── Print Webhook URL ───────────────────────────────────────────────
 Write-Host ""
-$envFile = Join-Path $RepoRoot ".env.live"
-$token = ""
-if (Test-Path $envFile) {
-    $envContent = Get-Content $envFile -Raw
-    $tokenMatch = [regex]::Match($envContent, "(?m)^WEBHOOK_SHARED_TOKEN=(.+)$")
-    if ($tokenMatch.Success) { $token = $tokenMatch.Groups[1].Value.Trim() }
-}
-
 try {
     $publicIp = (Invoke-RestMethod -Uri "https://api.ipify.org" -TimeoutSec 5).Trim()
+    if ($serverPort -eq 80) {
+        $webhookUrl = "http://$publicIp/webhook?token=$token"
+    } else {
+        $webhookUrl = "http://$publicIp`:$serverPort/webhook?token=$token"
+    }
     Write-Host "  ============================================" -ForegroundColor Cyan
     Write-Host "  TradingView Webhook URL:" -ForegroundColor Cyan
-    Write-Host "  http://$publicIp`:5001/webhook?token=$token" -ForegroundColor Green
+    Write-Host "  $webhookUrl" -ForegroundColor Green
     Write-Host "  ============================================" -ForegroundColor Cyan
 } catch {
     Write-Host "  Could not determine public IP. Webhook URL:" -ForegroundColor Yellow
-    Write-Host "  http://<VPS_IP>:5001/webhook?token=$token" -ForegroundColor Yellow
+    Write-Host "  http://<VPS_IP>:$serverPort/webhook?token=$token" -ForegroundColor Yellow
 }
 
 # ─── Summary ──────────────────────────────────────────────────────────
@@ -135,10 +144,10 @@ $components = @(
 
 foreach ($c in $components) {
     if (Test-Path $c.PidFile) {
-        $pid = (Get-Content $c.PidFile | Select-Object -First 1).Trim()
-        $running = [bool](Get-Process -Id $pid -ErrorAction SilentlyContinue)
+        $procId = (Get-Content $c.PidFile | Select-Object -First 1).Trim()
+        $running = [bool](Get-Process -Id $procId -ErrorAction SilentlyContinue)
         $color = if ($running) { "Green" } else { "Red" }
-        $status = if ($running) { "RUNNING (PID=$pid)" } else { "STOPPED" }
+        $status = if ($running) { "RUNNING (PID=$procId)" } else { "STOPPED" }
         Write-Host "  $($c.Name): $status" -ForegroundColor $color
     } else {
         Write-Host "  $($c.Name): NOT STARTED" -ForegroundColor Yellow
